@@ -9,7 +9,7 @@ FLAKY_TESTS ?= run
 TEST_CI_ARGS ?=
 STAGINGSERVER ?= node-www
 LOGLEVEL ?= silent
-OSTYPE := $(shell uname -s | tr '[A-Z]' '[a-z]')
+OSTYPE := $(shell uname -s | tr '[:upper:]' '[:lower:]')
 COVTESTS ?= test-cov
 COV_SKIP_TESTS ?= core_line_numbers.js,testFinalizer.js,test_function/test.js
 GTEST_FILTER ?= "*"
@@ -40,7 +40,7 @@ ifeq ($(OSTYPE), darwin)
 	GCOV = xcrun llvm-cov gcov
 endif
 
-BUILDTYPE_LOWER := $(shell echo $(BUILDTYPE) | tr '[A-Z]' '[a-z]')
+BUILDTYPE_LOWER := $(shell echo $(BUILDTYPE) | tr '[:upper:]' '[:lower:]')
 
 # Determine EXEEXT
 EXEEXT := $(shell $(PYTHON) -c \
@@ -65,8 +65,8 @@ V ?= 0
 available-node = \
 	if [ -x $(PWD)/$(NODE) ] && [ -e $(PWD)/$(NODE) ]; then \
 		$(PWD)/$(NODE) $(1); \
-	elif [ -x `which node` ] && [ -e `which node` ] && [ `which node` ]; then \
-		`which node` $(1); \
+	elif [ -x `command -v node` ] && [ -e `command -v node` ] && [ `command -v node` ]; then \
+		`command -v node` $(1); \
 	else \
 		echo "No available node, cannot run \"node $(1)\""; \
 		exit 1; \
@@ -85,7 +85,7 @@ endif
 # To add a target to the help, add a double comment (##) on the target line.
 help: ## Print help for targets with comments.
 	@printf "For more targets and info see the comments in the Makefile.\n\n"
-	@grep -E '^[a-zA-Z0-9._-]+:.*?## .*$$' Makefile | sort | \
+	@grep -E '^[[:alnum:]._-]+:.*?## .*$$' Makefile | sort | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
 # The .PHONY is needed to ensure that we recursively use the out/Makefile
@@ -243,10 +243,10 @@ coverage-test: coverage-build
 		--gcov-exclude='.*\b(deps|usr|out|cctest|embedding)\b' -v \
 		-r Release/obj.target --html --html-detail -o ../coverage/cxxcoverage.html \
 		--gcov-executable="$(GCOV)")
-	@echo -n "Javascript coverage %: "
+	@printf "Javascript coverage %%: "
 	@grep -B1 Lines coverage/index.html | head -n1 \
 		| sed 's/<[^>]*>//g'| sed 's/ //g'
-	@echo -n "C++ coverage %: "
+	@printf "C++ coverage %%: "
 	@grep -A3 Lines coverage/cxxcoverage.html | grep style  \
 		| sed 's/<[^>]*>//g'| sed 's/ //g'
 
@@ -588,12 +588,17 @@ test-doc: doc-only lint-md ## Builds, lints, and verifies the docs.
 	fi
 	$(NODE) tools/doc/checkLinks.js .
 
+.PHONY: test-doc-ci
+test-doc-ci: doc-only
+	$(PYTHON) tools/test.py --shell $(NODE) $(TEST_CI_ARGS) $(PARALLEL_ARGS) doctool
+	$(NODE) tools/doc/checkLinks.js .
+
 test-known-issues: all
 	$(PYTHON) tools/test.py $(PARALLEL_ARGS) known_issues
 
 # Related CI job: node-test-npm
 test-npm: $(NODE_EXE) ## Run the npm test suite on deps/npm.
-	$(NODE) tools/test-npm-package --install --logfile=test-npm.tap deps/npm test-node
+	$(NODE) tools/test-npm-package --install --logfile=test-npm.tap deps/npm test
 
 test-npm-publish: $(NODE_EXE)
 	npm_package_config_publishtest=true $(NODE) deps/npm/test/run.js
@@ -696,7 +701,7 @@ doc-only: tools/doc/node_modules \
 	@if [ "$(shell $(node_use_openssl))" != "true" ]; then \
 		echo "Skipping doc-only (no crypto)"; \
 	else \
-		$(MAKE) out/doc/api/all.html out/doc/api/all.json; \
+		$(MAKE) out/doc/api/all.html out/doc/api/all.json out/doc/api/stability; \
 	fi
 
 .PHONY: doc
@@ -748,6 +753,10 @@ out/doc/api/all.html: $(apidocs_html) tools/doc/allhtml.js \
 
 out/doc/api/all.json: $(apidocs_json) tools/doc/alljson.js | out/doc/api
 	$(call available-node, tools/doc/alljson.js)
+
+.PHONY: out/doc/api/stability
+out/doc/api/stability: out/doc/api/all.json tools/doc/stability.js | out/doc/api
+	$(call available-node, tools/doc/stability.js)
 
 .PHONY: docopen
 docopen: out/doc/api/all.html
@@ -898,7 +907,7 @@ BINARYNAME=$(TARNAME)-$(PLATFORM)-$(ARCH)
 endif
 BINARYTAR=$(BINARYNAME).tar
 # OSX doesn't have xz installed by default, http://macpkg.sourceforge.net/
-HAS_XZ ?= $(shell which xz > /dev/null 2>&1; [ $$? -eq 0 ] && echo 1 || echo 0)
+HAS_XZ ?= $(shell command -v xz > /dev/null 2>&1; [ $$? -eq 0 ] && echo 1 || echo 0)
 # Supply SKIP_XZ=1 to explicitly skip .tar.xz creation
 SKIP_XZ ?= 0
 XZ = $(shell [ $(HAS_XZ) -eq 1 -a $(SKIP_XZ) -eq 0 ] && echo 1 || echo 0)
@@ -979,7 +988,7 @@ $(PKG): release-only
 		--release-urlbase=$(RELEASE_URLBASE) \
 		$(CONFIG_FLAGS) $(BUILD_RELEASE_FLAGS)
 	$(MAKE) install V=$(V) DESTDIR=$(MACOSOUTDIR)/dist/node
-	SIGN="$(CODESIGN_CERT)" PKGDIR="$(MACOSOUTDIR)/dist/node/usr/local" bash \
+	SIGN="$(CODESIGN_CERT)" PKGDIR="$(MACOSOUTDIR)/dist/node/usr/local" sh \
 		tools/osx-codesign.sh
 	mkdir -p $(MACOSOUTDIR)/dist/npm/usr/local/lib/node_modules
 	mkdir -p $(MACOSOUTDIR)/pkgs
@@ -1001,8 +1010,8 @@ $(PKG): release-only
 	productbuild --distribution $(MACOSOUTDIR)/installer/productbuild/distribution.xml \
 		--resources $(MACOSOUTDIR)/installer/productbuild/Resources \
 		--package-path $(MACOSOUTDIR)/pkgs ./$(PKG)
-	SIGN="$(PRODUCTSIGN_CERT)" PKG="$(PKG)" bash tools/osx-productsign.sh
-	bash tools/osx-notarize.sh $(FULLVERSION)
+	SIGN="$(PRODUCTSIGN_CERT)" PKG="$(PKG)" sh tools/osx-productsign.sh
+	sh tools/osx-notarize.sh $(FULLVERSION)
 
 .PHONY: pkg
 # Builds the macOS installer for releases.
@@ -1120,7 +1129,7 @@ $(BINARYTAR): release-only
 	cp LICENSE $(BINARYNAME)
 	cp CHANGELOG.md $(BINARYNAME)
 ifeq ($(OSTYPE),darwin)
-	SIGN="$(CODESIGN_CERT)" PKGDIR="$(BINARYNAME)" bash tools/osx-codesign.sh
+	SIGN="$(CODESIGN_CERT)" PKGDIR="$(BINARYNAME)" sh tools/osx-codesign.sh
 endif
 	tar -cf $(BINARYNAME).tar $(BINARYNAME)
 	$(RM) -r $(BINARYNAME)
@@ -1211,7 +1220,7 @@ lint-js-fix:
 .PHONY: lint-js-doc
 # Note that on the CI `lint-js-ci` is run instead.
 # Lints the JavaScript code with eslint.
-lint-js: EXTENSIONS=.js,.mjs,.md
+lint-js lint-js-fix: EXTENSIONS=.js,.mjs,.md
 lint-js-doc: EXTENSIONS=.md
 lint-js lint-js-doc:
 	@if [ "$(shell $(node_use_openssl))" != "true" ]; then \
@@ -1346,7 +1355,7 @@ lint-py:
 	PYTHONPATH=tools/pip $(PYTHON) -m flake8 --count --show-source --statistics .
 else
 lint-py:
-	$(warning Python linting with flake8 is not avalible)
+	$(warning Python linting with flake8 is not available)
 	$(warning Run 'make lint-py-build')
 endif
 
@@ -1360,7 +1369,7 @@ lint: ## Run JS, C++, MD and doc linters.
 	$(MAKE) lint-addon-docs || EXIT_STATUS=$$? ; \
 	$(MAKE) lint-md || EXIT_STATUS=$$? ; \
 	exit $$EXIT_STATUS
-CONFLICT_RE=^>>>>>>> [0-9A-Fa-f]+|^<<<<<<< [A-Za-z]+
+CONFLICT_RE=^>>>>>>> [[:xdigit:]]+|^<<<<<<< [[:alpha:]]+
 
 # Related CI job: node-test-linter
 lint-ci: lint-js-ci lint-cpp lint-py lint-md lint-addon-docs
@@ -1383,7 +1392,7 @@ lint-clean:
 	$(RM) tools/.*lintstamp
 	$(RM) .eslintcache
 
-HAS_DOCKER ?= $(shell which docker > /dev/null 2>&1; [ $$? -eq 0 ] && echo 1 || echo 0)
+HAS_DOCKER ?= $(shell command -v docker > /dev/null 2>&1; [ $$? -eq 0 ] && echo 1 || echo 0)
 
 ifeq ($(HAS_DOCKER), 1)
 DOCKER_COMMAND ?= docker run -it -v $(PWD):/node

@@ -45,8 +45,8 @@ There are four fundamental stream types within Node.js:
   is written and read (for example, [`zlib.createDeflate()`][]).
 
 Additionally, this module includes the utility functions
-[`stream.pipeline()`][], [`stream.finished()`][] and
-[`stream.Readable.from()`][].
+[`stream.pipeline()`][], [`stream.finished()`][], [`stream.Readable.from()`][]
+and [`stream.addAbortSignal()`][].
 
 ### Streams Promises API
 <!-- YAML
@@ -75,8 +75,7 @@ object mode is not safe.
 <!--type=misc-->
 
 Both [`Writable`][] and [`Readable`][] streams will store data in an internal
-buffer that can be retrieved using `writable.writableBuffer` or
-`readable.readableBuffer`, respectively.
+buffer.
 
 The amount of data potentially buffered depends on the `highWaterMark` option
 passed into the stream's constructor. For normal streams, the `highWaterMark`
@@ -119,6 +118,11 @@ consumption of data received *from* the socket and whose `Writable` side allows
 writing data *to* the socket. Because data may be written to the socket at a
 faster or slower rate than data is received, each side should
 operate (and buffer) independently of the other.
+
+The mechanics of the internal buffering are an internal implementation detail
+and may be changed at any time. However, for certain advanced implementations,
+the internal buffers can be retrieved using `writable.writableBuffer` or
+`readable.readableBuffer`. Use of these undocumented properties is discouraged.
 
 ## API for stream consumers
 
@@ -580,6 +584,15 @@ This property contains the number of bytes (or objects) in the queue
 ready to be written. The value provides introspection data regarding
 the status of the `highWaterMark`.
 
+##### `writable.writableNeedDrain`
+<!-- YAML
+added: v15.2.0
+-->
+
+* {boolean}
+
+Is `true` if the stream's buffer has been full and stream will emit `'drain'`.
+
 ##### `writable.writableObjectMode`
 <!-- YAML
 added: v12.3.0
@@ -606,7 +619,7 @@ changes:
   not operating in object mode, `chunk` must be a string, `Buffer` or
   `Uint8Array`. For object mode streams, `chunk` may be any JavaScript value
   other than `null`.
-* `encoding` {string} The encoding, if `chunk` is a string. **Default:** `'utf8'`
+* `encoding` {string|null} The encoding, if `chunk` is a string. **Default:** `'utf8'`
 * `callback` {Function} Callback for when this chunk of data is flushed.
 * Returns: {boolean} `false` if the stream wishes for the calling code to
   wait for the `'drain'` event to be emitted before continuing to write
@@ -692,11 +705,11 @@ A [`Readable`][] stream can be in object mode or not, regardless of whether
 it is in flowing mode or paused mode.
 
 * In flowing mode, data is read from the underlying system automatically
-and provided to an application as quickly as possible using events via the
-[`EventEmitter`][] interface.
+  and provided to an application as quickly as possible using events via the
+  [`EventEmitter`][] interface.
 
 * In paused mode, the [`stream.read()`][stream-read] method must be called
-explicitly to read chunks of data from the stream.
+  explicitly to read chunks of data from the stream.
 
 All [`Readable`][] streams begin in paused mode but can be switched to flowing
 mode in one of the following ways:
@@ -1584,13 +1597,13 @@ changes:
 * `stream` {Stream} A readable and/or writable stream.
 * `options` {Object}
   * `error` {boolean} If set to `false`, then a call to `emit('error', err)` is
-    not treated as finished. **Default**: `true`.
+    not treated as finished. **Default:** `true`.
   * `readable` {boolean} When set to `false`, the callback will be called when
     the stream ends even though the stream might still be readable.
-    **Default**: `true`.
+    **Default:** `true`.
   * `writable` {boolean} When set to `false`, the callback will be called when
     the stream ends even though the stream might still be writable.
-    **Default**: `true`.
+    **Default:** `true`.
 * `callback` {Function} A callback function that takes an optional error
   argument.
 * Returns: {Function} A cleanup function which removes all registered
@@ -1706,7 +1719,11 @@ pipeline(
 );
 ```
 
-The `pipeline` API provides promise version:
+The `pipeline` API provides a promise version, which can also
+receive an options argument as the last parameter with a
+`signal` {AbortSignal} property. When the signal is aborted,
+`destroy` will be called on the underlying pipeline, with an
+`AbortError`.
 
 ```js
 const { pipeline } = require('stream/promises');
@@ -1721,6 +1738,30 @@ async function run() {
 }
 
 run().catch(console.error);
+```
+
+To use an `AbortSignal`, pass it inside an options object,
+as the last argument:
+
+```js
+const { pipeline } = require('stream/promises');
+
+async function run() {
+  const ac = new AbortController();
+  const options = {
+    signal: ac.signal,
+  };
+
+  setTimeout(() => ac.abort(), 1);
+  await pipeline(
+    fs.createReadStream('archive.tar'),
+    zlib.createGzip(),
+    fs.createWriteStream('archive.tar.gz'),
+    options,
+  );
+}
+
+run().catch(console.error); // AbortError
 ```
 
 The `pipeline` API also supports async generators:
@@ -1790,6 +1831,55 @@ Calling `Readable.from(string)` or `Readable.from(buffer)` will not have
 the strings or buffers be iterated to match the other streams semantics
 for performance reasons.
 
+### `stream.addAbortSignal(signal, stream)`
+<!-- YAML
+added: v15.4.0
+-->
+* `signal` {AbortSignal} A signal representing possible cancellation
+* `stream` {Stream} a stream to attach a signal to
+
+Attaches an AbortSignal to a readable or writeable stream. This lets code
+control stream destruction using an `AbortController`.
+
+Calling `abort` on the `AbortController` corresponding to the passed
+`AbortSignal` will behave the same way as calling `.destroy(new AbortError())`
+on the stream.
+
+```js
+const fs = require('fs');
+
+const controller = new AbortController();
+const read = addAbortSignal(
+  controller.signal,
+  fs.createReadStream(('object.json'))
+);
+// Later, abort the operation closing the stream
+controller.abort();
+```
+
+Or using an `AbortSignal` with a readable stream as an async iterable:
+
+```js
+const controller = new AbortController();
+setTimeout(() => controller.abort(), 10_000); // set a timeout
+const stream = addAbortSignal(
+  controller.signal,
+  fs.createReadStream(('object.json'))
+);
+(async () => {
+  try {
+    for await (const chunk of stream) {
+      await process(chunk);
+    }
+  } catch (e) {
+    if (e.name === 'AbortError') {
+      // The operation was cancelled
+    } else {
+      throw e;
+    }
+  }
+})();
+```
 ## API for stream implementers
 
 <!--type=misc-->
@@ -1880,6 +1970,9 @@ method.
 #### `new stream.Writable([options])`
 <!-- YAML
 changes:
+  - version: v15.5.0
+    pr-url: https://github.com/nodejs/node/pull/36431
+    description: support passing in an AbortSignal.
   - version: v14.0.0
     pr-url: https://github.com/nodejs/node/pull/30623
     description: Change `autoDestroy` option default to `true`.
@@ -1927,6 +2020,7 @@ changes:
     [`stream._construct()`][writable-_construct] method.
   * `autoDestroy` {boolean} Whether this stream should automatically call
     `.destroy()` on itself after ending. **Default:** `true`.
+  * `signal` {AbortSignal} A signal representing possible cancellation.
 
 <!-- eslint-disable no-useless-constructor -->
 ```js
@@ -1970,9 +2064,30 @@ const myWritable = new Writable({
 });
 ```
 
+Calling `abort` on the `AbortController` corresponding to the passed
+`AbortSignal` will behave the same way as calling `.destroy(new AbortError())`
+on the writeable stream.
+
+```js
+const { Writable } = require('stream');
+
+const controller = new AbortController();
+const myWritable = new Writable({
+  write(chunk, encoding, callback) {
+    // ...
+  },
+  writev(chunks, callback) {
+    // ...
+  },
+  signal: controller.signal
+});
+// Later, abort the operation closing the stream
+controller.abort();
+
+```
 #### `writable._construct(callback)`
 <!-- YAML
-added: v14.13.1
+added: v15.0.0
 -->
 
 * `callback` {Function} Call this function (optionally with an error
@@ -1995,10 +2110,9 @@ class WriteStream extends Writable {
   constructor(filename) {
     super();
     this.filename = filename;
-    this.fd = fd;
   }
   _construct(callback) {
-    fs.open(this.filename, (fd, err) => {
+    fs.open(this.filename, (err, fd) => {
       if (err) {
         callback(err);
       } else {
@@ -2076,8 +2190,14 @@ user programs.
 
 #### `writable._writev(chunks, callback)`
 
-* `chunks` {Object[]} The chunks to be written. Each chunk has following
-  format: `{ chunk: ..., encoding: ... }`.
+* `chunks` {Object[]} The data to be written. The value is an array of {Object}
+  that each represent a discreet chunk of data to write. The properties of
+  these objects are:
+  * `chunk` {Buffer|string} A buffer instance or string containing the data to
+    be written. The `chunk` will be a string if the `Writable` was created with
+    the `decodeStrings` option set to `false` and a string was passed to `write()`.
+  * `encoding` {string} The character encoding of the `chunk`. If `chunk` is
+    a `Buffer`, the `encoding` will be `'buffer'`.
 * `callback` {Function} A callback function (optionally with an error
   argument) to be invoked when processing is complete for the supplied chunks.
 
@@ -2218,6 +2338,9 @@ constructor and implement the [`readable._read()`][] method.
 #### `new stream.Readable([options])`
 <!-- YAML
 changes:
+  - version: v15.5.0
+    pr-url: https://github.com/nodejs/node/pull/36431
+    description: support passing in an AbortSignal.
   - version: v14.0.0
     pr-url: https://github.com/nodejs/node/pull/30623
     description: Change `autoDestroy` option default to `true`.
@@ -2248,6 +2371,7 @@ changes:
     [`stream._construct()`][readable-_construct] method.
   * `autoDestroy` {boolean} Whether this stream should automatically call
     `.destroy()` on itself after ending. **Default:** `true`.
+  * `signal` {AbortSignal} A signal representing possible cancellation.
 
 <!-- eslint-disable no-useless-constructor -->
 ```js
@@ -2288,9 +2412,26 @@ const myReadable = new Readable({
 });
 ```
 
+Calling `abort` on the `AbortController` corresponding to the passed
+`AbortSignal` will behave the same way as calling `.destroy(new AbortError())`
+on the readable created.
+
+```js
+const { Readable } = require('stream');
+const controller = new AbortController();
+const read = new Readable({
+  read(size) {
+    // ...
+  },
+  signal: controller.signal
+});
+// Later, abort the operation closing the stream
+controller.abort();
+```
+
 #### `readable._construct(callback)`
 <!-- YAML
-added: v14.13.1
+added: v15.0.0
 -->
 
 * `callback` {Function} Call this function (optionally with an error
@@ -3114,6 +3255,7 @@ contain multi-byte characters.
 [`stream.finished()`]: #stream_stream_finished_stream_options_callback
 [`stream.pipe()`]: #stream_readable_pipe_destination_options
 [`stream.pipeline()`]: #stream_stream_pipeline_source_transforms_destination_callback
+[`stream.addAbortSignal()`]: #stream_stream_addabortsignal_signal_stream
 [`stream.uncork()`]: #stream_writable_uncork
 [`stream.unpipe()`]: #stream_readable_unpipe_destination
 [`stream.wrap()`]: #stream_readable_wrap_stream

@@ -38,6 +38,30 @@ the [event loop][] and other operation system abstractions to Node.js.
 
 There is a [reference documentation for the libuv API][].
 
+## File structure
+
+The Node.js C++ files follow this structure:
+
+The `.h` header files contain declarations, and sometimes definitions that don’t
+require including other headers (e.g. getters, setters, etc.). They should only
+include other `.h` header files and nothing else.
+
+The `-inl.h` header files contain definitions of inline functions from the
+corresponding `.h` header file (e.g. functions marked `inline` in the
+declaration or `template` functions).  They always include the corresponding
+`.h` header file, and can include other `.h` and `-inl.h` header files as
+needed.  It is not mandatory to split out the definitions from the `.h` file
+into an `-inl.h` file, but it becomes necessary when there are multiple
+definitions and contents of other `-inl.h` files start being used. Therefore, it
+is recommended to split a `-inl.h` file when inline functions become longer than
+a few lines to keep the corresponding `.h` file readable and clean. All visible
+definitions from the `-inl.h` file should be declared in the corresponding `.h`
+header file.
+
+The `.cc` files contain definitions of non-inline functions from the
+corresponding `.h` header file. They always include the corresponding `.h`
+header file, and can include other `.h` and `-inl.h` header files as needed.
+
 ## Helpful concepts
 
 A number of concepts are involved in putting together Node.js on top of V8 and
@@ -381,11 +405,7 @@ void Initialize(Local<Object> target,
 
   env->SetProtoMethodNoSideEffect(channel_wrap, "getServers", GetServers);
 
-  Local<String> channel_wrap_string =
-      FIXED_ONE_BYTE_STRING(env->isolate(), "ChannelWrap");
-  channel_wrap->SetClassName(channel_wrap_string);
-  target->Set(env->context(), channel_wrap_string,
-              channel_wrap->GetFunction(context).ToLocalChecked()).Check();
+  env->SetConstructorFunction(target, "ChannelWrap", channel_wrap);
 }
 
 // Run the `Initialize` function when loading this module through
@@ -402,7 +422,7 @@ that state is through the use of `Environment::AddBindingData`, which gives
 binding functions access to an object for storing such state.
 That object is always a [`BaseObject`][].
 
-Its class needs to have a static `binding_data_name` field based on a
+Its class needs to have a static `type_name` field based on a
 constant string, in order to disambiguate it from other classes of this type,
 and which could e.g. match the binding’s name (in the example above, that would
 be `cares_wrap`).
@@ -413,7 +433,7 @@ class BindingData : public BaseObject {
  public:
   BindingData(Environment* env, Local<Object> obj) : BaseObject(env, obj) {}
 
-  static constexpr FastStringKey binding_data_name { "http_parser" };
+  static constexpr FastStringKey type_name { "http_parser" };
 
   std::vector<char> parser_buffer;
   bool parser_buffer_in_use = false;
@@ -495,16 +515,16 @@ The most common reasons for this are:
 holds a value of type `Local<T>`. It has methods that perform the same
 operations as the methods of `v8::Maybe`, but with different names:
 
-| `Maybe`                | `MaybeLocal`                    |
-| ---------------------- | ------------------------------- |
-| `maybe.IsNothing()`    | `maybe_local.IsEmpty()`         |
-| `maybe.IsJust()`       | `!maybe_local.IsEmpty()`        |
-| `maybe.To(&value)`     | `maybe_local.ToLocal(&local)`   |
-| `maybe.ToChecked()`    | `maybe_local.ToLocalChecked()`  |
-| `maybe.FromJust()`     | `maybe_local.ToLocalChecked()`  |
-| `maybe.Check()`        | –                               |
-| `v8::Nothing<T>()`     | `v8::MaybeLocal<T>()`           |
-| `v8::Just<T>(value)`   | `v8::MaybeLocal<T>(value)`      |
+| `Maybe`              | `MaybeLocal`                   |
+| -------------------- | ------------------------------ |
+| `maybe.IsNothing()`  | `maybe_local.IsEmpty()`        |
+| `maybe.IsJust()`     | `!maybe_local.IsEmpty()`       |
+| `maybe.To(&value)`   | `maybe_local.ToLocal(&local)`  |
+| `maybe.ToChecked()`  | `maybe_local.ToLocalChecked()` |
+| `maybe.FromJust()`   | `maybe_local.ToLocalChecked()` |
+| `maybe.Check()`      | –                              |
+| `v8::Nothing<T>()`   | `v8::MaybeLocal<T>()`          |
+| `v8::Just<T>(value)` | `v8::MaybeLocal<T>(value)`     |
 
 ##### Handling empty `Maybe`s
 

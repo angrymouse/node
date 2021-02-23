@@ -26,6 +26,7 @@
 #include "debug_utils-inl.h"
 #include "env-inl.h"
 #include "memory_tracker-inl.h"
+#include "histogram-inl.h"
 #include "node_binding.h"
 #include "node_errors.h"
 #include "node_internals.h"
@@ -415,7 +416,7 @@ MaybeLocal<Value> Environment::RunBootstrapping() {
   CHECK(req_wrap_queue()->IsEmpty());
   CHECK(handle_wrap_queue()->IsEmpty());
 
-  set_has_run_bootstrapping_code(true);
+  DoneBootstrapping();
 
   return scope.Escape(result);
 }
@@ -947,51 +948,6 @@ int InitializeNodeWithArgs(std::vector<std::string>* argv,
   return 0;
 }
 
-// TODO(addaleax): Deprecate and eventually remove this.
-void Init(int* argc,
-          const char** argv,
-          int* exec_argc,
-          const char*** exec_argv) {
-  std::vector<std::string> argv_(argv, argv + *argc);  // NOLINT
-  std::vector<std::string> exec_argv_;
-  std::vector<std::string> errors;
-
-  // This (approximately) duplicates some logic that has been moved to
-  // node::Start(), with the difference that here we explicitly call `exit()`.
-  int exit_code = InitializeNodeWithArgs(&argv_, &exec_argv_, &errors);
-
-  for (const std::string& error : errors)
-    fprintf(stderr, "%s: %s\n", argv_.at(0).c_str(), error.c_str());
-  if (exit_code != 0) exit(exit_code);
-
-  if (per_process::cli_options->print_version) {
-    printf("%s\n", NODE_VERSION);
-    exit(0);
-  }
-
-  if (per_process::cli_options->print_bash_completion) {
-    std::string completion = options_parser::GetBashCompletion();
-    printf("%s\n", completion.c_str());
-    exit(0);
-  }
-
-  if (per_process::cli_options->print_v8_help) {
-    V8::SetFlagsFromString("--help", static_cast<size_t>(6));
-    exit(0);
-  }
-
-  *argc = argv_.size();
-  *exec_argc = exec_argv_.size();
-  // These leak memory, because, in the original code of this function, no
-  // extra allocations were visible. This should be okay because this function
-  // is only supposed to be called once per process, though.
-  *exec_argv = Malloc<const char*>(*exec_argc);
-  for (int i = 0; i < *exec_argc; ++i)
-    (*exec_argv)[i] = strdup(exec_argv_[i].c_str());
-  for (int i = 0; i < *argc; ++i)
-    argv[i] = strdup(argv_[i].c_str());
-}
-
 InitializationResult InitializeOncePerProcess(int argc, char** argv) {
   // Initialized the enabled list for Debug() calls with system
   // environment variables.
@@ -1068,7 +1024,7 @@ InitializationResult InitializeOncePerProcess(int argc, char** argv) {
 #endif  // HAVE_OPENSSL
 
   per_process::v8_platform.Initialize(
-      per_process::cli_options->v8_thread_pool_size);
+      static_cast<int>(per_process::cli_options->v8_thread_pool_size));
   V8::Initialize();
   performance::performance_v8_start = PERFORMANCE_NOW();
   per_process::v8_initialized = true;

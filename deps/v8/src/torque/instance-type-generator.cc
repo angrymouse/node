@@ -372,7 +372,7 @@ void PrintInstanceTypes(InstanceTypeTree* root, std::ostream& definitions,
 void ImplementationVisitor::GenerateInstanceTypes(
     const std::string& output_directory) {
   std::stringstream header;
-  std::string file_name = "instance-types-tq.h";
+  std::string file_name = "instance-types.h";
   {
     IncludeGuardScope guard(header, file_name);
 
@@ -451,7 +451,7 @@ void ImplementationVisitor::GenerateInstanceTypes(
       if (type->IsExtern()) continue;
       torque_defined_class_list << "  V(" << upper_case_name << ") \\\n";
 
-      if (type->IsAbstract()) continue;
+      if (type->IsAbstract() || type->HasCustomMap()) continue;
       torque_defined_map_csa_list << "  V(_, " << upper_case_name << "Map, "
                                   << lower_case_name << "_map, "
                                   << upper_case_name << ") \\\n";

@@ -1,12 +1,8 @@
 ---
-section: using-npm
 title: config
+section: 7
 description: More than you probably want to know about npm configuration
 ---
-
-# config(7)
-
-## More than you probably want to know about npm configuration
 
 ### Description
 
@@ -161,7 +157,7 @@ When "dev" or "development" and running local `npm shrinkwrap`,
 
 When "true" submit audit reports alongside `npm install` runs to the default
 registry and all registries configured for scopes.  See the documentation
-for [`npm audit`](/cli-commands/audit) for details on what is submitted.
+for [`npm audit`](/commands/npm-audit) for details on what is submitted.
 
 #### audit-level
 
@@ -257,7 +253,7 @@ well as for the CA information to be stored in a file on disk.
 * Default: Windows: `%AppData%\npm-cache`, Posix: `~/.npm`
 * Type: path
 
-The location of npm's cache directory.  See [`npm cache`](/cli-commands/cache)
+The location of npm's cache directory.  See [`npm cache`](/commands/npm-cache)
 
 #### cache-lock-stale
 
@@ -383,6 +379,63 @@ commands that modify your local installation, eg, `install`, `update`,
 `dedupe`, `uninstall`.  This is NOT currently honored by some network related
 commands, eg `dist-tags`, `owner`, etc.
 
+#### diff
+
+* Default: null
+* Type: String, Array, null
+
+Define arguments to compare in `npm diff`.
+
+#### diff-name-only
+
+* Default: false
+* Type: Boolean
+
+Prints only filenames when using `npm diff`.
+
+#### diff-unified
+
+* Type: number
+* Default: `3`
+
+The number of lines of context to print in `npm diff`.
+
+#### diff-ignore-all-space
+
+* Type: Boolean
+* Default: false
+
+Ignore whitespace when comparing lines in `npm diff.
+
+#### diff-no-prefix
+
+* Type: Boolean
+* Default: false
+
+Do not show any source or destination prefix in `npm diff` output.
+
+#### diff-src-prefix
+
+* Type: String
+* Default: `"a/"`
+
+Source prefix to be used in `npm diff` output.
+
+#### diff-dst-prefix
+
+* Type: String
+* Default: `"b/"`
+
+Destination prefix to be used in `npm diff` output.
+
+#### diff-text
+
+* Alias: `-a`
+* Type: Boolean
+* Default: false
+
+Treat all files as text in `npm diff`.
+
 #### editor
 
 * Default: `EDITOR` environment variable if set, or `"vi"` on Posix,
@@ -419,9 +472,22 @@ mistakes, unnecessary performance degradation, and malicious input.
   range (including SemVer-major changes).
 * Allow a module to be installed as a direct dependency of itself.
 * Allow unpublishing all versions of a published package.
+* Allow conflicting peerDependencies to be installed in the root project.
 
 If you don't have a clear idea of what you want to do, it is strongly
 recommended that you do not use this option!
+
+#### foreground-scripts
+
+* Default: false
+* Type: Boolean
+
+Run all build scripts (ie, `preinstall`, `install`, and `postinstall`)
+scripts for installed packages in the foreground process, sharing standard
+input, output, and error with the main npm process.
+
+Note that this will generally make installs run slower, and be much
+noisier, but can be useful for debugging.
 
 #### format-package-lock
 
@@ -436,8 +502,8 @@ Format `package-lock.json` or `npm-shrinkwrap.json` as a human readable file.
 * Type: Boolean
 
 When "true" displays the message at the end of each `npm install`
-aknowledging the number of dependencies looking for funding.
-See [`npm fund`](/cli-commands/fund) for details.
+acknowledging the number of dependencies looking for funding.
+See [`npm fund`](/commands/npm-fund) for details.
 
 #### fetch-retries
 
@@ -584,7 +650,7 @@ Option that allows for defining which types of dependencies to install.
 A module that will be loaded by the `npm init` command.  See the
 documentation for the
 [init-package-json](https://github.com/npm/init-package-json) module
-for more information, or [npm init](/cli-commands/init).
+for more information, or [npm init](/commands/npm-init).
 
 #### init-author-name
 
@@ -747,13 +813,6 @@ combination). Passed to the `http` `Agent` used to make the request.
 Commit message which is used by `npm version` when creating version commit.
 
 Any "%s" in the message will be replaced with the version number.
-
-#### metrics-registry
-
-* Default: The value of  `registry` (which defaults to "https://registry.npmjs.org/")
-* Type: String
-
-The registry you want to send cli metrics to if `send-metrics` is true.
 
 #### node-options
 
@@ -1093,16 +1152,6 @@ searches.
 The age of the cache, in seconds, before another registry request is made if
 using legacy search endpoint.
 
-#### send-metrics
-
-* Default: false
-* Type: Boolean
-
-If true, success/failure metrics will be reported to the registry stored in
-`metrics-registry`.  These requests contain the number of successful and
-failing runs of the npm CLI and the time period overwhich those counts were
-gathered. No identifying information is included in these requests.
-
 #### shell
 
 * Default: SHELL environment variable, or "bash" on Posix, or "cmd" on
@@ -1251,7 +1300,7 @@ version of npm than the latest.
 * Type: Boolean
 
 Set to show short usage output (like the -H output)
-instead of complete help when doing [`npm help`](/cli-commands/help).
+instead of complete help when doing [`npm help`](/commands/npm-help).
 
 #### userconfig
 
@@ -1309,8 +1358,8 @@ Set to `"browser"` to view html help content in the default web browser.
 
 ### See also
 
-* [npm config](/cli-commands/config)
+* [npm config](/commands/npm-config)
 * [npmrc](/configuring-npm/npmrc)
 * [npm scripts](/using-npm/scripts)
 * [npm folders](/configuring-npm/folders)
-* [npm](/cli-commands/npm)
+* [npm](/commands/npm)

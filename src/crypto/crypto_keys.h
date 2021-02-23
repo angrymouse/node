@@ -63,7 +63,10 @@ using PublicKeyEncodingConfig = AsymmetricKeyEncodingConfig;
 
 struct PrivateKeyEncodingConfig : public AsymmetricKeyEncodingConfig {
   const EVP_CIPHER* cipher_;
-  ByteSource passphrase_;
+  // The ByteSource alone is not enough to distinguish between "no passphrase"
+  // and a zero-length passphrase (which can be a null pointer), therefore, we
+  // use a NonCopyableMaybe.
+  NonCopyableMaybe<ByteSource> passphrase_;
 };
 
 // This uses the built-in reference counter of OpenSSL to manage an EVP_PKEY
@@ -78,6 +81,7 @@ class ManagedEVPPKey : public MemoryRetainer {
 
   operator bool() const;
   EVP_PKEY* get() const;
+  Mutex* mutex() const;
 
   void MemoryInfo(MemoryTracker* tracker) const override;
   SET_MEMORY_INFO_NAME(ManagedEVPPKey)
@@ -124,6 +128,7 @@ class ManagedEVPPKey : public MemoryRetainer {
   size_t size_of_public_key() const;
 
   EVPKeyPointer pkey_;
+  std::shared_ptr<Mutex> mutex_;
 };
 
 // Objects of this class can safely be shared among threads.
@@ -182,6 +187,7 @@ class KeyObjectHandle : public BaseObject {
 
   static void Init(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void InitECRaw(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void InitEDRaw(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void InitJWK(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void GetKeyDetail(const v8::FunctionCallbackInfo<v8::Value>& args);
 

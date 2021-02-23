@@ -19,6 +19,7 @@ env:
 
 jobs:
   test-asan:
+    if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     env:
       CC: clang
@@ -36,4 +37,4 @@ jobs:
       - name: Build
         run: make build-ci -j2 V=1
       - name: Test
-        run: make run-ci -j2 V=1 TEST_CI_ARGS="-p actions"
+        run: make run-ci -j2 V=1 TEST_CI_ARGS="-p actions -t 300"

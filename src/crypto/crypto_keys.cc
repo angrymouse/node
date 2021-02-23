@@ -1,7 +1,7 @@
 #include "crypto/crypto_keys.h"
 #include "crypto/crypto_common.h"
 #include "crypto/crypto_dsa.h"
-#include "crypto/crypto_ecdh.h"
+#include "crypto/crypto_ec.h"
 #include "crypto/crypto_dh.h"
 #include "crypto/crypto_rsa.h"
 #include "crypto/crypto_util.h"
@@ -210,8 +210,7 @@ ParseKeyResult ParsePrivateKey(EVPKeyPointer* pkey,
                                const PrivateKeyEncodingConfig& config,
                                const char* key,
                                size_t key_len) {
-  // OpenSSL needs a non-const pointer, that's why the const_cast is required.
-  char* const passphrase = const_cast<char*>(config.passphrase_.get());
+  const ByteSource* passphrase = config.passphrase_.get();
 
   if (config.format_ == kKeyFormatPEM) {
     BIOPointer bio(BIO_new_mem_buf(key, key_len));
@@ -221,7 +220,7 @@ ParseKeyResult ParsePrivateKey(EVPKeyPointer* pkey,
     pkey->reset(PEM_read_bio_PrivateKey(bio.get(),
                                         nullptr,
                                         PasswordCallback,
-                                        passphrase));
+                                        &passphrase));
   } else {
     CHECK_EQ(config.format_, kKeyFormatDER);
 
@@ -238,7 +237,7 @@ ParseKeyResult ParsePrivateKey(EVPKeyPointer* pkey,
         pkey->reset(d2i_PKCS8PrivateKey_bio(bio.get(),
                                             nullptr,
                                             PasswordCallback,
-                                            passphrase));
+                                            &passphrase));
       } else {
         PKCS8Pointer p8inf(d2i_PKCS8_PRIV_KEY_INFO_bio(bio.get(), nullptr));
         if (p8inf)
@@ -260,7 +259,7 @@ ParseKeyResult ParsePrivateKey(EVPKeyPointer* pkey,
     return ParseKeyResult::kParseKeyOk;
   if (ERR_GET_LIB(err) == ERR_LIB_PEM &&
       ERR_GET_REASON(err) == PEM_R_BAD_PASSWORD_READ) {
-    if (config.passphrase_.get() == nullptr)
+    if (config.passphrase_.IsEmpty())
       return ParseKeyResult::kParseKeyNeedPassphrase;
   }
   return ParseKeyResult::kParseKeyFailed;
@@ -293,6 +292,28 @@ MaybeLocal<Value> WritePrivateKey(
   BIOPointer bio(BIO_new(BIO_s_mem()));
   CHECK(bio);
 
+  // If an empty string was passed as the passphrase, the ByteSource might
+  // contain a null pointer, which OpenSSL will ignore, causing it to invoke its
+  // default passphrase callback, which would block the thread until the user
+  // manually enters a passphrase. We could supply our own passphrase callback
+  // to handle this special case, but it is easier to avoid passing a null
+  // pointer to OpenSSL.
+  char* pass = nullptr;
+  size_t pass_len = 0;
+  if (!config.passphrase_.IsEmpty()) {
+    pass = const_cast<char*>(config.passphrase_->get());
+    pass_len = config.passphrase_->size();
+    if (pass == nullptr) {
+      // OpenSSL will not actually dereference this pointer, so it can be any
+      // non-null pointer. We cannot assert that directly, which is why we
+      // intentionally use a pointer that will likely cause a segmentation fault
+      // when dereferenced.
+      CHECK_EQ(pass_len, 0);
+      pass = reinterpret_cast<char*>(-1);
+      CHECK_NE(pass, nullptr);
+    }
+  }
+
   bool err;
 
   PKEncodingType encoding_type = config.type_.ToChecked();
@@ -303,12 +324,11 @@ MaybeLocal<Value> WritePrivateKey(
     RSAPointer rsa(EVP_PKEY_get1_RSA(pkey));
     if (config.format_ == kKeyFormatPEM) {
       // Encode PKCS#1 as PEM.
-      const char* pass = config.passphrase_.get();
       err = PEM_write_bio_RSAPrivateKey(
                 bio.get(), rsa.get(),
                 config.cipher_,
-                reinterpret_cast<unsigned char*>(const_cast<char*>(pass)),
-                config.passphrase_.size(),
+                reinterpret_cast<unsigned char*>(pass),
+                pass_len,
                 nullptr, nullptr) != 1;
     } else {
       // Encode PKCS#1 as DER. This does not permit encryption.
@@ -322,8 +342,8 @@ MaybeLocal<Value> WritePrivateKey(
       err = PEM_write_bio_PKCS8PrivateKey(
                 bio.get(), pkey,
                 config.cipher_,
-                const_cast<char*>(config.passphrase_.get()),
-                config.passphrase_.size(),
+                pass,
+                pass_len,
                 nullptr, nullptr) != 1;
     } else {
       // Encode PKCS#8 as DER.
@@ -331,8 +351,8 @@ MaybeLocal<Value> WritePrivateKey(
       err = i2d_PKCS8PrivateKey_bio(
                 bio.get(), pkey,
                 config.cipher_,
-                const_cast<char*>(config.passphrase_.get()),
-                config.passphrase_.size(),
+                pass,
+                pass_len,
                 nullptr, nullptr) != 1;
     }
   } else {
@@ -344,12 +364,11 @@ MaybeLocal<Value> WritePrivateKey(
     ECKeyPointer ec_key(EVP_PKEY_get1_EC_KEY(pkey));
     if (config.format_ == kKeyFormatPEM) {
       // Encode SEC1 as PEM.
-      const char* pass = config.passphrase_.get();
       err = PEM_write_bio_ECPrivateKey(
                 bio.get(), ec_key.get(),
                 config.cipher_,
-                reinterpret_cast<unsigned char*>(const_cast<char*>(pass)),
-                config.passphrase_.size(),
+                reinterpret_cast<unsigned char*>(pass),
+                pass_len,
                 nullptr, nullptr) != 1;
     } else {
       // Encode SEC1 as DER. This does not permit encryption.
@@ -471,8 +490,14 @@ Maybe<bool> ExportJWKAsymmetricKey(
     case EVP_PKEY_RSA:
       // Fall through
     case EVP_PKEY_RSA_PSS: return ExportJWKRsaKey(env, key, target);
-    case EVP_PKEY_DSA: return ExportJWKDsaKey(env, key, target);
     case EVP_PKEY_EC: return ExportJWKEcKey(env, key, target);
+    case EVP_PKEY_ED25519:
+      // Fall through
+    case EVP_PKEY_ED448:
+      // Fall through
+    case EVP_PKEY_X25519:
+      // Fall through
+    case EVP_PKEY_X448: return ExportJWKEdKey(env, key, target);
   }
   THROW_ERR_CRYPTO_INVALID_KEYTYPE(env);
   return Just(false);
@@ -486,14 +511,12 @@ std::shared_ptr<KeyObjectData> ImportJWKAsymmetricKey(
     unsigned int offset) {
   if (strcmp(kty, "RSA") == 0) {
     return ImportJWKRsaKey(env, jwk, args, offset);
-  } else if (strcmp(kty, "DSA") == 0) {
-    return ImportJWKDsaKey(env, jwk, args, offset);
   } else if (strcmp(kty, "EC") == 0) {
     return ImportJWKEcKey(env, jwk, args, offset);
   }
 
   char msg[1024];
-  snprintf(msg, sizeof(msg), "%s is not a support JWK key type", kty);
+  snprintf(msg, sizeof(msg), "%s is not a supported JWK key type", kty);
   THROW_ERR_CRYPTO_INVALID_JWK(env, msg);
   return std::shared_ptr<KeyObjectData>();
 }
@@ -506,10 +529,9 @@ Maybe<bool> GetSecretKeyDetail(
   // converted to bits.
 
   size_t length = key->GetSymmetricKeySize() * CHAR_BIT;
-  return target->Set(
-      env->context(),
-      env->length_string(),
-      Number::New(env->isolate(), length));
+  return target->Set(env->context(),
+                     env->length_string(),
+                     Number::New(env->isolate(), static_cast<double>(length)));
 }
 
 Maybe<bool> GetAsymmetricKeyDetail(
@@ -529,7 +551,8 @@ Maybe<bool> GetAsymmetricKeyDetail(
 }
 }  // namespace
 
-ManagedEVPPKey::ManagedEVPPKey(EVPKeyPointer&& pkey) : pkey_(std::move(pkey)) {}
+ManagedEVPPKey::ManagedEVPPKey(EVPKeyPointer&& pkey) : pkey_(std::move(pkey)),
+    mutex_(std::make_shared<Mutex>()) {}
 
 ManagedEVPPKey::ManagedEVPPKey(const ManagedEVPPKey& that) {
   *this = that;
@@ -541,6 +564,8 @@ ManagedEVPPKey& ManagedEVPPKey::operator=(const ManagedEVPPKey& that) {
   if (pkey_)
     EVP_PKEY_up_ref(pkey_.get());
 
+  mutex_ = that.mutex_;
+
   return *this;
 }
 
@@ -550,6 +575,10 @@ ManagedEVPPKey::operator bool() const {
 
 EVP_PKEY* ManagedEVPPKey::get() const {
   return pkey_.get();
+}
+
+Mutex* ManagedEVPPKey::mutex() const {
+  return mutex_.get();
 }
 
 void ManagedEVPPKey::MemoryInfo(MemoryTracker* tracker) const {
@@ -640,7 +669,8 @@ ManagedEVPPKey::GetPrivateKeyEncodingFromJs(
         THROW_ERR_OUT_OF_RANGE(env, "passphrase is too big");
         return NonCopyableMaybe<PrivateKeyEncodingConfig>();
       }
-      result.passphrase_ = passphrase.ToNullTerminatedCopy();
+      result.passphrase_ = NonCopyableMaybe<ByteSource>(
+          passphrase.ToNullTerminatedCopy());
     } else {
       CHECK(args[*offset]->IsNullOrUndefined() && !needs_passphrase);
     }
@@ -853,6 +883,7 @@ v8::Local<v8::Function> KeyObjectHandle::Initialize(Environment* env) {
   env->SetProtoMethod(t, "export", Export);
   env->SetProtoMethod(t, "exportJwk", ExportJWK);
   env->SetProtoMethod(t, "initECRaw", InitECRaw);
+  env->SetProtoMethod(t, "initEDRaw", InitEDRaw);
   env->SetProtoMethod(t, "initJwk", InitJWK);
   env->SetProtoMethod(t, "keyDetail", GetKeyDetail);
 
@@ -911,7 +942,7 @@ void KeyObjectHandle::Init(const FunctionCallbackInfo<Value>& args) {
     break;
   }
   case kKeyTypePublic: {
-    CHECK_EQ(args.Length(), 4);
+    CHECK_EQ(args.Length(), 5);
 
     offset = 1;
     pkey = ManagedEVPPKey::GetPublicOrPrivateKeyFromJs(args, &offset);
@@ -1008,6 +1039,48 @@ void KeyObjectHandle::InitECRaw(const FunctionCallbackInfo<Value>& args) {
       KeyObjectData::CreateAsymmetric(
           kKeyTypePublic,
           ManagedEVPPKey(std::move(pkey)));
+
+  args.GetReturnValue().Set(true);
+}
+
+void KeyObjectHandle::InitEDRaw(const FunctionCallbackInfo<Value>& args) {
+  Environment* env = Environment::GetCurrent(args);
+  KeyObjectHandle* key;
+  ASSIGN_OR_RETURN_UNWRAP(&key, args.Holder());
+
+  CHECK(args[0]->IsString());
+  Utf8Value name(env->isolate(), args[0]);
+
+  ArrayBufferOrViewContents<unsigned char> key_data(args[1]);
+  KeyType type = static_cast<KeyType>(args[2].As<Int32>()->Value());
+
+  MarkPopErrorOnReturn mark_pop_error_on_return;
+
+  typedef EVP_PKEY* (*new_key_fn)(int, ENGINE*, const unsigned char*, size_t);
+  new_key_fn fn = type == kKeyTypePrivate
+      ? EVP_PKEY_new_raw_private_key
+      : EVP_PKEY_new_raw_public_key;
+
+  int id = GetOKPCurveFromName(*name);
+
+  switch (id) {
+    case EVP_PKEY_X25519:
+    case EVP_PKEY_X448:
+    case EVP_PKEY_ED25519:
+    case EVP_PKEY_ED448: {
+      EVPKeyPointer pkey(fn(id, nullptr, key_data.data(), key_data.size()));
+      if (!pkey)
+        return args.GetReturnValue().Set(false);
+      key->data_ =
+          KeyObjectData::CreateAsymmetric(
+              type,
+              ManagedEVPPKey(std::move(pkey)));
+      CHECK(key->data_);
+      break;
+    }
+    default:
+      UNREACHABLE();
+  }
 
   args.GetReturnValue().Set(true);
 }
@@ -1259,8 +1332,10 @@ WebCryptoKeyExportStatus PKEY_SPKI_Export(
     KeyObjectData* key_data,
     ByteSource* out) {
   CHECK_EQ(key_data->GetKeyType(), kKeyTypePublic);
+  ManagedEVPPKey m_pkey = key_data->GetAsymmetricKey();
+  Mutex::ScopedLock lock(*m_pkey.mutex());
   BIOPointer bio(BIO_new(BIO_s_mem()));
-  if (!i2d_PUBKEY_bio(bio.get(), key_data->GetAsymmetricKey().get()))
+  if (!i2d_PUBKEY_bio(bio.get(), m_pkey.get()))
     return WebCryptoKeyExportStatus::FAILED;
 
   *out = ByteSource::FromBIO(bio);
@@ -1271,8 +1346,11 @@ WebCryptoKeyExportStatus PKEY_PKCS8_Export(
     KeyObjectData* key_data,
     ByteSource* out) {
   CHECK_EQ(key_data->GetKeyType(), kKeyTypePrivate);
+  ManagedEVPPKey m_pkey = key_data->GetAsymmetricKey();
+  Mutex::ScopedLock lock(*m_pkey.mutex());
+
   BIOPointer bio(BIO_new(BIO_s_mem()));
-  PKCS8Pointer p8inf(EVP_PKEY2PKCS8(key_data->GetAsymmetricKey().get()));
+  PKCS8Pointer p8inf(EVP_PKEY2PKCS8(m_pkey.get()));
   if (!i2d_PKCS8_PRIV_KEY_INFO_bio(bio.get(), p8inf.get()))
     return WebCryptoKeyExportStatus::FAILED;
 

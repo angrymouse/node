@@ -612,6 +612,18 @@ A human-readable string describing the reason for the error.
 <a id="nodejs-error-codes"></a>
 ## Node.js error codes
 
+<a id="ABORT_ERR"></a>
+### `ABORT_ERR`
+<!-- YAML
+added: v15.0.0
+-->
+Used when an operation has been aborted (typically using an `AbortController`).
+
+APIs _not_ using `AbortSignal`s typically do not raise an error with this code.
+
+This code does not use the regular `ERR_*` convention Node.js errors use in
+order to be compatible with the web platform's `AbortError`.
+
 <a id="ERR_AMBIGUOUS_ARGUMENT"></a>
 ### `ERR_AMBIGUOUS_ARGUMENT`
 
@@ -907,6 +919,18 @@ added: v15.0.0
 
 Initialization of an asynchronous crypto operation failed.
 
+<a id="ERR_CRYPTO_JWK_UNSUPPORTED_CURVE"></a>
+### `ERR_CRYPTO_JWK_UNSUPPORTED_CURVE`
+
+Key's Elliptic Curve is not registered for use in the
+[JSON Web Key Elliptic Curve Registry][].
+
+<a id="ERR_CRYPTO_JWK_UNSUPPORTED_KEY_TYPE"></a>
+### `ERR_CRYPTO_JWK_UNSUPPORTED_KEY_TYPE`
+
+Key's Asymmetric Key Type is not registered for use in the
+[JSON Web Key Types Registry][].
+
 <a id="ERR_CRYPTO_OPERATION_FAILED"></a>
 ### `ERR_CRYPTO_OPERATION_FAILED`
 <!-- YAML
@@ -955,6 +979,14 @@ An unknown cipher was specified.
 An unknown Diffie-Hellman group name was given. See
 [`crypto.getDiffieHellman()`][] for a list of valid group names.
 
+<a id="ERR_CRYPTO_UNSUPPORTED_OPERATION"></a>
+### `ERR_CRYPTO_UNSUPPORTED_OPERATION`
+<!-- YAML
+added: v15.0.0
+-->
+
+An attempt to invoke an unsupported crypto operation was made.
+
 <a id="ERR_DLOPEN_FAILED"></a>
 ### `ERR_DLOPEN_FAILED`
 <!-- YAML
@@ -967,14 +999,6 @@ A call to `process.dlopen()` failed.
 ### `ERR_DIR_CLOSED`
 
 The [`fs.Dir`][] was previously closed.
-
-<a id"ERR_CRYPTO_UNSUPPORTED_OPERATION"></a>
-### `ERR_CRYPTO_UNSUPPORTED_OPERATION`
-<!-- YAML
-added: v15.0.0
--->
-
-An attempt to invoke an unsupported crypto operation was made.
 
 <a id="ERR_DIR_CONCURRENT_OPERATION"></a>
 ### `ERR_DIR_CONCURRENT_OPERATION`
@@ -1225,6 +1249,11 @@ reached.
 
 An attempt was made to initiate a new push stream from within a push stream.
 Nested push streams are not permitted.
+
+<a id="ERR_HTTP2_NO_MEM"></a>
+### `ERR_HTTP2_NO_MEM`
+
+Out of memory when using the `http2session.setLocalWindowSize(windowSize)` API.
 
 <a id="ERR_HTTP2_NO_SOCKET_MANIPULATION"></a>
 ### `ERR_HTTP2_NO_SOCKET_MANIPULATION`
@@ -1551,8 +1580,8 @@ which is not supported.
 <a id="ERR_INVALID_REPL_INPUT"></a>
 ### `ERR_INVALID_REPL_INPUT`
 
-The input may not be used in the [`REPL`][]. All prohibited inputs are
-documented in the [`REPL`][]'s documentation.
+The input may not be used in the [`REPL`][]. The conditions under which this
+error is used are described in the [`REPL`][] documentation.
 
 <a id="ERR_INVALID_RETURN_PROPERTY"></a>
 ### `ERR_INVALID_RETURN_PROPERTY`
@@ -1794,7 +1823,7 @@ would be possible by calling a callback more than once.
 <a id="ERR_NAPI_CONS_FUNCTION"></a>
 ### `ERR_NAPI_CONS_FUNCTION`
 
-While using `N-API`, a constructor passed was not a function.
+While using `Node-API`, a constructor passed was not a function.
 
 <a id="ERR_NAPI_INVALID_DATAVIEW_ARGS"></a>
 ### `ERR_NAPI_INVALID_DATAVIEW_ARGS`
@@ -1874,6 +1903,16 @@ The `package.json` [`"exports"`][] field does not export the requested subpath.
 Because exports are encapsulated, private internal modules that are not exported
 cannot be imported through the package resolution, unless using an absolute URL.
 
+<a id="ERR_PERFORMANCE_INVALID_TIMESTAMP"></a>
+### `ERR_PERFORMANCE_INVALID_TIMESTAMP`
+
+An invalid timestamp value was provided for a performance mark or measure.
+
+<a id="ERR_PERFORMANCE_MEASURE_INVALID_OPTIONS"></a>
+### `ERR_PERFORMANCE_MEASURE_INVALID_OPTIONS`
+
+Invalid options were provided for a performance measure.
+
 <a id="ERR_PROTO_ACCESS"></a>
 ### `ERR_PROTO_ACCESS`
 
@@ -1881,37 +1920,6 @@ Accessing `Object.prototype.__proto__` has been forbidden using
 [`--disable-proto=throw`][]. [`Object.getPrototypeOf`][] and
 [`Object.setPrototypeOf`][] should be used to get and set the prototype of an
 object.
-
-<a id="ERR_QUIC_FAILED_TO_CREATE_SESSION"></a>
-### `ERR_QUIC_FAILED_TO_CREATE_SESSION`
-
-> Stability: 1 - Experimental
-
-An unspecified failure occured trying to initialize a new `QuicClientSession`.
-
-<a id="ERR_QUIC_INVALID_REMOTE_TRANSPORT_PARAMS"></a>
-### `ERR_QUIC_INVALID_REMOTE_TRANSPORT_PARAMS`
-
-> Stability: 1 - Experimental
-
-An attempt to resume a `QuicClientSession` using remembered remote transport
-parameters failed because the transport parameters were invalid.
-
-<a id="ERR_QUIC_INVALID_TLS_SESSION_TICKET"></a>
-### `ERR_QUIC_INVALID_TLS_SESSION_TICKET`
-
-> Stability: 1 - Experimental
-
-An attempt resume a `QuicClientSession` using a remembered TLS session ticket
-failed because the session ticket was invalid.
-
-<a id="ERR_QUIC_VERSION_NEGOTIATION"></a>
-### `ERR_QUIC_VERSION_NEGOTIATION`
-
-> Stability: 1 - Experimental
-
-A `QuicClientSession` received a version negotiation request from the
-server and was shutdown accordingly.
 
 <a id="ERR_REQUIRE_ESM"></a>
 ### `ERR_REQUIRE_ESM`
@@ -2561,7 +2569,7 @@ added: v9.0.0
 removed: v10.0.0
 -->
 
-Used by the `N-API` when `Constructor.prototype` is not an object.
+Used by the `Node-API` when `Constructor.prototype` is not an object.
 
 <a id="ERR_NO_LONGER_SUPPORTED"></a>
 ### `ERR_NO_LONGER_SUPPORTED`
@@ -2730,6 +2738,8 @@ The native call from `process.cpuUsage` could not be processed.
 
 [ES Module]: esm.md
 [ICU]: intl.md#intl_internationalization_support
+[JSON Web Key Elliptic Curve Registry]: https://www.iana.org/assignments/jose/jose.xhtml#web-key-elliptic-curve
+[JSON Web Key Types Registry]: https://www.iana.org/assignments/jose/jose.xhtml#web-key-types
 [Node.js error codes]: #nodejs-error-codes
 [RFC 7230 Section 3]: https://tools.ietf.org/html/rfc7230#section-3
 [Subresource Integrity specification]: https://www.w3.org/TR/SRI/#the-integrity-attribute

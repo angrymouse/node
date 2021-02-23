@@ -119,7 +119,7 @@ callbacks will be called with an error with code `ECANCELLED`.
 
 ### `resolver.setLocalAddress([ipv4][, ipv6])`
 <!-- YAML
-added: REPLACEME
+added: v15.1.0
 -->
 
 * `ipv4` {string} A string representation of an IPv4 address.
@@ -155,7 +155,7 @@ section if a custom port is used.
   '4.4.4.4',
   '2001:4860:4860::8888',
   '4.4.4.4:1053',
-  '[2001:4860:4860::8888]:1053'
+  '[2001:4860:4860::8888]:1053',
 ]
 ```
 
@@ -250,13 +250,13 @@ changes:
 The following flags can be passed as hints to [`dns.lookup()`][].
 
 * `dns.ADDRCONFIG`: Limits returned address types to the types of non-loopback
-addresses configured on the system. For example, IPv4 addresses are only
-returned if the current system has at least one IPv4 address configured.
+  addresses configured on the system. For example, IPv4 addresses are only
+  returned if the current system has at least one IPv4 address configured.
 * `dns.V4MAPPED`: If the IPv6 family was specified, but no IPv6 addresses were
-found, then return IPv4 mapped IPv6 addresses. It is not supported
-on some operating systems (e.g FreeBSD 10.1).
+  found, then return IPv4 mapped IPv6 addresses. It is not supported
+  on some operating systems (e.g FreeBSD 10.1).
 * `dns.ALL`: If `dns.V4MAPPED` is specified, return resolved IPv6 addresses as
-well as IPv4 mapped IPv6 addresses.
+  well as IPv4 mapped IPv6 addresses.
 
 ## `dns.lookupService(address, port, callback)`
 <!-- YAML
@@ -450,7 +450,7 @@ added: v15.0.0
 Uses the DNS protocol to resolve `CAA` records for the `hostname`. The
 `addresses` argument passed to the `callback` function
 will contain an array of certification authority authorization records
-available for the `hostname` (e.g. `[{critial: 0, iodef:
+available for the `hostname` (e.g. `[{critical: 0, iodef:
 'mailto:pki@example.com'}, {critical: 128, issue: 'pki.example.com'}]`).
 
 ## `dns.resolveMx(hostname, callback)`
@@ -599,10 +599,12 @@ be an array of objects with the following properties:
 added: v0.1.27
 -->
 
+<!--lint disable no-undefined-references list-item-bullet-indent-->
 * `hostname` {string}
 * `callback` {Function}
   * `err` {Error}
   * `records` <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#String_type" class="type">&lt;string[][]&gt;</a>
+<!--lint enable no-undefined-references list-item-bullet-indent-->
 
 Uses the DNS protocol to resolve text queries (`TXT` records) for the
 `hostname`. The `records` argument passed to the `callback` function is a
@@ -643,7 +645,7 @@ dns.setServers([
   '4.4.4.4',
   '[2001:4860:4860::8888]',
   '4.4.4.4:1053',
-  '[2001:4860:4860::8888]:1053'
+  '[2001:4860:4860::8888]:1053',
 ]);
 ```
 
@@ -728,6 +730,14 @@ The following methods from the `dnsPromises` API are available:
 * [`resolver.reverse()`][`dnsPromises.reverse()`]
 * [`resolver.setServers()`][`dnsPromises.setServers()`]
 
+### `resolver.cancel()`
+<!-- YAML
+added: v15.3.0
+-->
+
+Cancel all outstanding DNS queries made by this resolver. The corresponding
+promises will be rejected with an error with code `ECANCELLED`.
+
 ### `dnsPromises.getServers()`
 <!-- YAML
 added: v10.6.0
@@ -745,7 +755,7 @@ section if a custom port is used.
   '4.4.4.4',
   '2001:4860:4860::8888',
   '4.4.4.4:1053',
-  '[2001:4860:4860::8888]:1053'
+  '[2001:4860:4860::8888]:1053',
 ]
 ```
 
@@ -948,7 +958,7 @@ Here is an example of the result object:
     minttl: 60 } ]
 ```
 
-## `dnsPromises.resolveCaa(hostname)`
+### `dnsPromises.resolveCaa(hostname)`
 <!-- YAML
 added: v15.0.0
 -->
@@ -958,7 +968,7 @@ added: v15.0.0
 Uses the DNS protocol to resolve `CAA` records for the `hostname`. On success,
 the `Promise` is resolved with an array of objects containing available
 certification authority authorization records available for the `hostname`
-(e.g. `[{critial: 0, iodef: 'mailto:pki@example.com'},{critical: 128, issue:
+(e.g. `[{critical: 0, iodef: 'mailto:pki@example.com'},{critical: 128, issue:
 'pki.example.com'}]`).
 
 ### `dnsPromises.resolveCname(hostname)`
@@ -1138,7 +1148,7 @@ dnsPromises.setServers([
   '4.4.4.4',
   '[2001:4860:4860::8888]',
   '4.4.4.4:1053',
-  '[2001:4860:4860::8888]:1053'
+  '[2001:4860:4860::8888]:1053',
 ]);
 ```
 

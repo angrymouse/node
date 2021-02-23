@@ -1353,9 +1353,12 @@ class ParserBase {
   // Checks if the expression is a valid reference expression (e.g., on the
   // left-hand side of assignments). Although ruled out by ECMA as early errors,
   // we allow calls for web compatibility and rewrite them to a runtime throw.
+  // Modern language features can be exempted from this hack by passing
+  // early_error = true.
   ExpressionT RewriteInvalidReferenceExpression(ExpressionT expression,
                                                 int beg_pos, int end_pos,
-                                                MessageTemplate message);
+                                                MessageTemplate message,
+                                                bool early_error);
 
   bool IsValidReferenceExpression(ExpressionT expression);
 
@@ -1850,7 +1853,6 @@ ParserBase<Impl>::ParsePrimaryExpression() {
       return ParseSuperExpression(is_new);
     }
     case Token::IMPORT:
-      if (!flags().allow_harmony_dynamic_import()) break;
       return ParseImportExpressions();
 
     case Token::LBRACK:
@@ -2825,9 +2827,12 @@ ParserBase<Impl>::ParseAssignmentExpressionCoverGrammar() {
                                           end_position());
   } else {
     DCHECK(!IsValidReferenceExpression(expression));
+    // For web compatibility reasons, throw early errors only for logical
+    // assignment, not for regular assignment.
+    const bool early_error = Token::IsLogicalAssignmentOp(op);
     expression = RewriteInvalidReferenceExpression(
         expression, lhs_beg_pos, end_position(),
-        MessageTemplate::kInvalidLhsInAssignment);
+        MessageTemplate::kInvalidLhsInAssignment, early_error);
   }
 
   Consume(op);
@@ -2983,12 +2988,15 @@ ParserBase<Impl>::ParseCoalesceExpression(ExpressionT expression) {
   bool first_nullish = true;
   while (peek() == Token::NULLISH) {
     SourceRange right_range;
-    SourceRangeScope right_range_scope(scanner(), &right_range);
-    Consume(Token::NULLISH);
-    int pos = peek_position();
-
-    // Parse BitwiseOR or higher.
-    ExpressionT y = ParseBinaryExpression(6);
+    int pos;
+    ExpressionT y;
+    {
+      SourceRangeScope right_range_scope(scanner(), &right_range);
+      Consume(Token::NULLISH);
+      pos = peek_position();
+      // Parse BitwiseOR or higher.
+      y = ParseBinaryExpression(6);
+    }
     if (first_nullish) {
       expression =
           factory()->NewBinaryOperation(Token::NULLISH, expression, y, pos);
@@ -3142,9 +3150,10 @@ ParserBase<Impl>::ParseUnaryOrPrefixExpression() {
       expression_scope()->MarkIdentifierAsAssigned();
     }
   } else {
+    const bool early_error = false;
     expression = RewriteInvalidReferenceExpression(
         expression, expression_position, end_position(),
-        MessageTemplate::kInvalidLhsInPrefixOp);
+        MessageTemplate::kInvalidLhsInPrefixOp, early_error);
   }
 
   return factory()->NewCountOperation(op, true /* prefix */, expression,
@@ -3217,9 +3226,10 @@ typename ParserBase<Impl>::ExpressionT
 ParserBase<Impl>::ParsePostfixContinuation(ExpressionT expression,
                                            int lhs_beg_pos) {
   if (V8_UNLIKELY(!IsValidReferenceExpression(expression))) {
+    const bool early_error = false;
     expression = RewriteInvalidReferenceExpression(
         expression, lhs_beg_pos, end_position(),
-        MessageTemplate::kInvalidLhsInPostfixOp);
+        MessageTemplate::kInvalidLhsInPostfixOp, early_error);
   }
   if (impl()->IsIdentifier(expression)) {
     expression_scope()->MarkIdentifierAsAssigned();
@@ -3286,6 +3296,7 @@ ParserBase<Impl>::ParseLeftHandSideContinuation(ExpressionT result) {
 
   bool optional_chaining = false;
   bool is_optional = false;
+  int optional_link_begin;
   do {
     switch (peek()) {
       case Token::QUESTION_PERIOD: {
@@ -3293,10 +3304,16 @@ ParserBase<Impl>::ParseLeftHandSideContinuation(ExpressionT result) {
           ReportUnexpectedToken(peek());
           return impl()->FailureExpression();
         }
+        // Include the ?. in the source range position.
+        optional_link_begin = scanner()->peek_location().beg_pos;
         Consume(Token::QUESTION_PERIOD);
         is_optional = true;
         optional_chaining = true;
-        continue;
+        if (Token::IsPropertyOrCall(peek())) continue;
+        int pos = position();
+        ExpressionT key = ParsePropertyOrPrivatePropertyName();
+        result = factory()->NewProperty(result, key, pos, is_optional);
+        break;
       }
 
       /* Property */
@@ -3376,14 +3393,7 @@ ParserBase<Impl>::ParseLeftHandSideContinuation(ExpressionT result) {
       }
 
       default:
-        /* Optional Property */
-        if (is_optional) {
-          DCHECK_EQ(scanner()->current_token(), Token::QUESTION_PERIOD);
-          int pos = position();
-          ExpressionT key = ParsePropertyOrPrivatePropertyName();
-          result = factory()->NewProperty(result, key, pos, is_optional);
-          break;
-        }
+        // Template literals in/after an Optional Chain not supported:
         if (optional_chaining) {
           impl()->ReportMessageAt(scanner()->peek_location(),
                                   MessageTemplate::kOptionalChainingNoTemplate);
@@ -3394,8 +3404,12 @@ ParserBase<Impl>::ParseLeftHandSideContinuation(ExpressionT result) {
         result = ParseTemplateLiteral(result, position(), true);
         break;
     }
-    is_optional = false;
-  } while (is_optional || Token::IsPropertyOrCall(peek()));
+    if (is_optional) {
+      SourceRange chain_link_range(optional_link_begin, end_position());
+      impl()->RecordExpressionSourceRange(result, chain_link_range);
+      is_optional = false;
+    }
+  } while (Token::IsPropertyOrCall(peek()));
   if (optional_chaining) return factory()->NewOptionalChain(result);
   return result;
 }
@@ -3431,10 +3445,7 @@ ParserBase<Impl>::ParseMemberWithPresentNewPrefixesExpression() {
   if (peek() == Token::SUPER) {
     const bool is_new = true;
     result = ParseSuperExpression(is_new);
-  } else if (flags().allow_harmony_dynamic_import() &&
-             peek() == Token::IMPORT &&
-             (!flags().allow_harmony_import_meta() ||
-              PeekAhead() == Token::LPAREN)) {
+  } else if (peek() == Token::IMPORT && PeekAhead() == Token::LPAREN) {
     impl()->ReportMessageAt(scanner()->peek_location(),
                             MessageTemplate::kImportCallNotNewExpression);
     return impl()->FailureExpression();
@@ -3532,11 +3543,9 @@ ParserBase<Impl>::ParseMemberExpression() {
 template <typename Impl>
 typename ParserBase<Impl>::ExpressionT
 ParserBase<Impl>::ParseImportExpressions() {
-  DCHECK(flags().allow_harmony_dynamic_import());
-
   Consume(Token::IMPORT);
   int pos = position();
-  if (flags().allow_harmony_import_meta() && Check(Token::PERIOD)) {
+  if (Check(Token::PERIOD)) {
     ExpectContextualKeyword(ast_value_factory()->meta_string(), "import.meta",
                             pos);
     if (!flags().is_module()) {
@@ -4743,7 +4752,8 @@ template <typename Impl>
 typename ParserBase<Impl>::ExpressionT
 ParserBase<Impl>::RewriteInvalidReferenceExpression(ExpressionT expression,
                                                     int beg_pos, int end_pos,
-                                                    MessageTemplate message) {
+                                                    MessageTemplate message,
+                                                    bool early_error) {
   DCHECK(!IsValidReferenceExpression(expression));
   if (impl()->IsIdentifier(expression)) {
     DCHECK(is_strict(language_mode()));
@@ -4753,7 +4763,8 @@ ParserBase<Impl>::RewriteInvalidReferenceExpression(ExpressionT expression,
                     MessageTemplate::kStrictEvalArguments);
     return impl()->FailureExpression();
   }
-  if (expression->IsCall() && !expression->AsCall()->is_tagged_template()) {
+  if (expression->IsCall() && !expression->AsCall()->is_tagged_template() &&
+      !early_error) {
     expression_scope()->RecordPatternError(
         Scanner::Location(beg_pos, end_pos),
         MessageTemplate::kInvalidDestructuringTarget);
@@ -4767,6 +4778,9 @@ ParserBase<Impl>::RewriteInvalidReferenceExpression(ExpressionT expression,
     ExpressionT error = impl()->NewThrowReferenceError(message, beg_pos);
     return factory()->NewProperty(expression, error, beg_pos);
   }
+  // Tagged templates and other modern language features (which pass early_error
+  // = true) are exempt from the web compatibility hack. Throw a regular early
+  // error.
   ReportMessageAt(Scanner::Location(beg_pos, end_pos), message);
   return impl()->FailureExpression();
 }

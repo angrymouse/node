@@ -40,6 +40,12 @@ const customTypesMap = {
   'WebAssembly.Instance':
     `${jsDocPrefix}Reference/Global_Objects/WebAssembly/Instance`,
 
+  'Blob': 'buffer.html#buffer_class_blob',
+
+  'BroadcastChannel':
+    'worker_threads.html#worker_threads_class_broadcastchannel_' +
+    'extends_eventtarget',
+
   'Iterable':
     `${jsDocPrefix}Reference/Iteration_protocols#The_iterable_protocol`,
   'Iterator':
@@ -108,6 +114,10 @@ const customTypesMap = {
   'NodeScryptImportParams':
     'webcrypto.html#webcrypto_class_nodescryptimportparams',
   'NodeScryptParams': 'webcrypto.html#webcrypto_class_nodescryptparams',
+  'NodeEdKeyImportParams':
+    'webcrypto.html#webcrypto_class_nodeedkeyimportparams',
+  'NodeEdKeyGenParams':
+    'webcrypto.html#webcrypto_class_nodeedkeygenparams',
 
   'dgram.Socket': 'dgram.html#dgram_class_dgram_socket',
 
@@ -172,6 +182,10 @@ const customTypesMap = {
   'os.constants.dlopen': 'os.html#os_dlopen_constants',
 
   'Histogram': 'perf_hooks.html#perf_hooks_class_histogram',
+  'IntervalHistogram':
+     'perf_hooks.html#perf_hooks_class_intervalhistogram_extends_histogram',
+  'RecordableHistogram':
+     'perf_hooks.html#perf_hooks_class_recordablehistogram_extends_histogram',
   'PerformanceEntry': 'perf_hooks.html#perf_hooks_class_performanceentry',
   'PerformanceNodeTiming':
     'perf_hooks.html#perf_hooks_class_performancenodetiming',
@@ -179,10 +193,6 @@ const customTypesMap = {
     'perf_hooks.html#perf_hooks_class_perf_hooks_performanceobserver',
   'PerformanceObserverEntryList':
     'perf_hooks.html#perf_hooks_class_performanceobserverentrylist',
-  'QuicEndpoint': 'quic.html#quic_class_quicendpoint',
-  'QuicSession': 'quic.html#quic_class_quicserversession_extends_quicsession',
-  'QuicSocket': 'quic.html#quic_net_createquicsocket_options',
-  'QuicStream': 'quic.html#quic_class_quicstream_extends_stream_duplex',
 
   'readline.Interface': 'readline.html#readline_class_interface',
 
@@ -212,6 +222,8 @@ const customTypesMap = {
   'vm.SourceTextModule': 'vm.html#vm_class_vm_sourcetextmodule',
 
   'MessagePort': 'worker_threads.html#worker_threads_class_messageport',
+
+  'X509Certificate': 'crypto.html#crypto_class_x509certificate',
 
   'zlib options': 'zlib.html#zlib_class_options',
 };

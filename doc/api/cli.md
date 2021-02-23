@@ -192,14 +192,21 @@ Enable FIPS-compliant crypto at startup. (Requires Node.js to be built with
 ### `--enable-source-maps`
 <!-- YAML
 added: v12.12.0
+changes:
+  - version: REPLACEME
+    pr-url: https://github.com/nodejs/node/pull/37362
+    description: This API is no longer experimental.
 -->
 
-> Stability: 1 - Experimental
+Enable [Source Map v3][Source Map] support for stack traces.
 
-Enable experimental Source Map v3 support for stack traces.
+When using a transpiler, such as TypeScript, strack traces thrown by an
+application reference the transpiled code, not the original source position.
+`--enable-source-maps` enables caching of Source Maps and makes a best
+effort to report stack traces relative to the original source file.
 
-Currently, overriding `Error.prepareStackTrace` is ignored when the
-`--enable-source-maps` flag is set.
+Overriding `Error.prepareStackTrace` prevents `--enable-source-maps` from
+modifiying the stack trace.
 
 ### `--experimental-abortcontroller`
 <!-- YAML
@@ -210,7 +217,7 @@ changes:
     description: --experimental-abortcontroller is no longer required.
 -->
 
-Experimental `AbortController` and `AbortSignal` support is enabled by default.
+`AbortController` and `AbortSignal` support is enabled by default.
 Use of this command-line flag is no longer required.
 
 ### `--experimental-import-meta-resolve`
@@ -234,7 +241,7 @@ Enable experimental JSON support for the ES Module loader.
 added: v9.0.0
 -->
 
-Specify the `module` of a custom [experimental ECMAScript Module loader][].
+Specify the `module` of a custom experimental [ECMAScript Module loader][].
 `module` may be either a path to a file, or an ECMAScript Module name.
 
 ### `--experimental-modules`
@@ -300,14 +307,14 @@ Enable experimental WebAssembly System Interface (WASI) support.
 added: v12.3.0
 -->
 
+Enable experimental WebAssembly module support.
+
 ### `--force-context-aware`
 <!-- YAML
 added: v12.12.0
 -->
 
 Disable loading native addons that are not [context-aware][].
-
-Enable experimental WebAssembly module support.
 
 ### `--force-fips`
 <!-- YAML
@@ -335,7 +342,7 @@ be added.
 
 ### `--heapsnapshot-near-heap-limit=max_count`
 <!-- YAML
-added: REPLACEME
+added: v15.1.0
 -->
 
 > Stability: 1 - Experimental
@@ -355,9 +362,9 @@ Node.js instance runs out of memory when `max_count` is greater than `0`.
 
 Generating V8 snapshots takes time and memory (both memory managed by the
 V8 heap and native memory outside the V8 heap). The bigger the heap is,
-the more resources it needs. Node.js will adjust the V8 heap to accommondate
+the more resources it needs. Node.js will adjust the V8 heap to accommodate
 the additional V8 heap memory overhead, and try its best to avoid using up
-all the memory avialable to the process. When the process uses
+all the memory available to the process. When the process uses
 more memory than the system deems appropriate, the process may be terminated
 abruptly by the system, depending on the system configuration.
 
@@ -848,6 +855,40 @@ Enables report to be generated on uncaught exceptions. Useful when inspecting
 the JavaScript stack in conjunction with native stack and other runtime
 environment data.
 
+### `--secure-heap=n`
+<!-- YAML
+added: v15.6.0
+-->
+
+Initializes an OpenSSL secure heap of `n` bytes. When initialized, the
+secure heap is used for selected types of allocations within OpenSSL
+during key generation and other operations. This is useful, for instance,
+to prevent sensitive information from leaking due to pointer overruns
+or underruns.
+
+The secure heap is a fixed size and cannot be resized at runtime so,
+if used, it is important to select a large enough heap to cover all
+application uses.
+
+The heap size given must be a power of two. Any value less than 2
+will disable the secure heap.
+
+The secure heap is disabled by default.
+
+The secure heap is not available on Windows.
+
+See [`CRYPTO_secure_malloc_init`][] for more details.
+
+### `--secure-heap-min=n`
+<!-- YAML
+added: v15.6.0
+-->
+
+When using `--secure-heap`, the `--secure-heap-min` flag specifies the
+minimum allocation from the secure heap. The minimum value is `2`.
+The maximum value is the lesser of `--secure-heap` or `2147483647`.
+The value given must be a power of two.
+
 ### `--throw-deprecation`
 <!-- YAML
 added: v0.11.14
@@ -1059,8 +1100,13 @@ Track heap object allocations for heap snapshots.
 ### `--unhandled-rejections=mode`
 <!-- YAML
 added:
- - v12.0.0
- - v10.17.0
+  - v12.0.0
+  - v10.17.0
+changes:
+  - version: v15.0.0
+    pr-url: https://github.com/nodejs/node/pull/33021
+    description: Changed default mode to `throw`. Previously, a warning was
+                 emitted.
 -->
 
 Using this flag allows to change what should happen when an unhandled rejection
@@ -1205,6 +1251,9 @@ Preload the specified module at startup.
 
 Follows `require()`'s module resolution
 rules. `module` may be either a path to a file, or a node module name.
+
+Only CommonJS modules are supported. Attempting to preload a
+ES6 Module using `--require` will fail with an error.
 
 ### `-v`, `--version`
 <!-- YAML
@@ -1353,6 +1402,8 @@ Node.js options that are allowed are:
 * `--report-signal`
 * `--report-uncaught-exception`
 * `--require`, `-r`
+* `--secure-heap-min`
+* `--secure-heap`
 * `--throw-deprecation`
 * `--title`
 * `--tls-cipher-list`
@@ -1642,6 +1693,7 @@ $ node --max-old-space-size=1536 index.js
 ```
 
 [Chrome DevTools Protocol]: https://chromedevtools.github.io/devtools-protocol/
+[ECMAScript Module loader]: esm.md#esm_loaders
 [REPL]: repl.md
 [ScriptCoverage]: https://chromedevtools.github.io/devtools-protocol/tot/Profiler#type-ScriptCoverage
 [Source Map]: https://sourcemaps.info/spec.html
@@ -1650,6 +1702,7 @@ $ node --max-old-space-size=1536 index.js
 [`--openssl-config`]: #cli_openssl_config_file
 [`Atomics.wait()`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Atomics/wait
 [`Buffer`]: buffer.md#buffer_class_buffer
+[`CRYPTO_secure_malloc_init`]: https://www.openssl.org/docs/man1.1.0/man3/CRYPTO_secure_malloc_init.html
 [`NODE_OPTIONS`]: #cli_node_options_options
 [`SlowBuffer`]: buffer.md#buffer_class_slowbuffer
 [`process.setUncaughtExceptionCaptureCallback()`]: process.md#process_process_setuncaughtexceptioncapturecallback_fn
@@ -1662,7 +1715,6 @@ $ node --max-old-space-size=1536 index.js
 [debugger]: debugger.md
 [debugging security implications]: https://nodejs.org/en/docs/guides/debugging-getting-started/#security-implications
 [emit_warning]: process.md#process_process_emitwarning_warning_type_code_ctor
-[experimental ECMAScript Module loader]: esm.md#esm_experimental_loaders
 [jitless]: https://v8.dev/blog/jitless
 [libuv threadpool documentation]: https://docs.libuv.org/en/latest/threadpool.html
 [remote code execution]: https://www.owasp.org/index.php/Code_Injection

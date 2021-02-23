@@ -191,21 +191,22 @@ WebCryptoCipherStatus RSA_Cipher(
     const ByteSource& in,
     ByteSource* out) {
   CHECK_NE(key_data->GetKeyType(), kKeyTypeSecret);
+  ManagedEVPPKey m_pkey = key_data->GetAsymmetricKey();
+  Mutex::ScopedLock lock(*m_pkey.mutex());
 
-  EVPKeyCtxPointer ctx(
-      EVP_PKEY_CTX_new(key_data->GetAsymmetricKey().get(), nullptr));
+  EVPKeyCtxPointer ctx(EVP_PKEY_CTX_new(m_pkey.get(), nullptr));
 
   if (!ctx || init(ctx.get()) <= 0)
-    return WebCryptoCipherStatus::ERR_FAILED;
+    return WebCryptoCipherStatus::FAILED;
 
   if (EVP_PKEY_CTX_set_rsa_padding(ctx.get(), params.padding) <= 0) {
-    return WebCryptoCipherStatus::ERR_FAILED;
+    return WebCryptoCipherStatus::FAILED;
   }
 
   if (params.digest != nullptr &&
       (EVP_PKEY_CTX_set_rsa_oaep_md(ctx.get(), params.digest) <= 0 ||
        EVP_PKEY_CTX_set_rsa_mgf1_md(ctx.get(), params.digest) <= 0)) {
-    return WebCryptoCipherStatus::ERR_FAILED;
+    return WebCryptoCipherStatus::FAILED;
   }
 
   size_t label_len = params.label.size();
@@ -214,7 +215,7 @@ WebCryptoCipherStatus RSA_Cipher(
     CHECK_NOT_NULL(label);
     if (EVP_PKEY_CTX_set0_rsa_oaep_label(ctx.get(), label, label_len) <= 0) {
       OPENSSL_free(label);
-      return WebCryptoCipherStatus::ERR_FAILED;
+      return WebCryptoCipherStatus::FAILED;
     }
   }
 
@@ -225,7 +226,7 @@ WebCryptoCipherStatus RSA_Cipher(
           &out_len,
           in.data<unsigned char>(),
           in.size()) <= 0) {
-    return WebCryptoCipherStatus::ERR_FAILED;
+    return WebCryptoCipherStatus::FAILED;
   }
 
   char* data = MallocOpenSSL<char>(out_len);
@@ -238,13 +239,13 @@ WebCryptoCipherStatus RSA_Cipher(
           &out_len,
           in.data<unsigned char>(),
           in.size()) <= 0) {
-    return WebCryptoCipherStatus::ERR_FAILED;
+    return WebCryptoCipherStatus::FAILED;
   }
 
   buf.Resize(out_len);
 
   *out = std::move(buf);
-  return WebCryptoCipherStatus::ERR_OK;
+  return WebCryptoCipherStatus::OK;
 }
 }  // namespace
 
@@ -356,18 +357,26 @@ WebCryptoCipherStatus RSACipherTraits::DoCipher(
       return RSA_Cipher<EVP_PKEY_decrypt_init, EVP_PKEY_decrypt>(
           env, key_data.get(), params, in, out);
   }
-  return WebCryptoCipherStatus::ERR_FAILED;
+  return WebCryptoCipherStatus::FAILED;
 }
 
 Maybe<bool> ExportJWKRsaKey(
     Environment* env,
     std::shared_ptr<KeyObjectData> key,
     Local<Object> target) {
-  ManagedEVPPKey pkey = key->GetAsymmetricKey();
-  int type = EVP_PKEY_id(pkey.get());
+  ManagedEVPPKey m_pkey = key->GetAsymmetricKey();
+  Mutex::ScopedLock lock(*m_pkey.mutex());
+  int type = EVP_PKEY_id(m_pkey.get());
   CHECK(type == EVP_PKEY_RSA || type == EVP_PKEY_RSA_PSS);
 
-  RSA* rsa = EVP_PKEY_get0_RSA(pkey.get());
+  // TODO(tniessen): Remove the "else" branch once we drop support for OpenSSL
+  // versions older than 1.1.1e via FIPS / dynamic linking.
+  RSA* rsa;
+  if (OpenSSL_version_num() >= 0x1010105fL) {
+    rsa = EVP_PKEY_get0_RSA(m_pkey.get());
+  } else {
+    rsa = static_cast<RSA*>(EVP_PKEY_get0(m_pkey.get()));
+  }
   CHECK_NOT_NULL(rsa);
 
   const BIGNUM* n;
@@ -422,12 +431,12 @@ std::shared_ptr<KeyObjectData> ImportJWKRsaKey(
       !jwk->Get(env->context(), env->jwk_d_string()).ToLocal(&d_value) ||
       !n_value->IsString() ||
       !e_value->IsString()) {
-    THROW_ERR_CRYPTO_INVALID_JWK(env, "Invalid JSK RSA key");
+    THROW_ERR_CRYPTO_INVALID_JWK(env, "Invalid JWK RSA key");
     return std::shared_ptr<KeyObjectData>();
   }
 
   if (!d_value->IsUndefined() && !d_value->IsString()) {
-    THROW_ERR_CRYPTO_INVALID_JWK(env, "Invalid JSK RSA key");
+    THROW_ERR_CRYPTO_INVALID_JWK(env, "Invalid JWK RSA key");
     return std::shared_ptr<KeyObjectData>();
   }
 
@@ -443,7 +452,7 @@ std::shared_ptr<KeyObjectData> ImportJWKRsaKey(
           n.ToBN().release(),
           e.ToBN().release(),
           nullptr)) {
-    THROW_ERR_CRYPTO_INVALID_JWK(env, "Invalid JSK RSA key");
+    THROW_ERR_CRYPTO_INVALID_JWK(env, "Invalid JWK RSA key");
     return std::shared_ptr<KeyObjectData>();
   }
 
@@ -459,7 +468,7 @@ std::shared_ptr<KeyObjectData> ImportJWKRsaKey(
         !jwk->Get(env->context(), env->jwk_dp_string()).ToLocal(&dp_value) ||
         !jwk->Get(env->context(), env->jwk_dq_string()).ToLocal(&dq_value) ||
         !jwk->Get(env->context(), env->jwk_qi_string()).ToLocal(&qi_value)) {
-      THROW_ERR_CRYPTO_INVALID_JWK(env, "Invalid JSK RSA key");
+      THROW_ERR_CRYPTO_INVALID_JWK(env, "Invalid JWK RSA key");
       return std::shared_ptr<KeyObjectData>();
     }
 
@@ -468,7 +477,7 @@ std::shared_ptr<KeyObjectData> ImportJWKRsaKey(
         !dp_value->IsString() ||
         !dq_value->IsString() ||
         !qi_value->IsString()) {
-      THROW_ERR_CRYPTO_INVALID_JWK(env, "Invalid JSK RSA key");
+      THROW_ERR_CRYPTO_INVALID_JWK(env, "Invalid JWK RSA key");
       return std::shared_ptr<KeyObjectData>();
     }
 
@@ -486,7 +495,7 @@ std::shared_ptr<KeyObjectData> ImportJWKRsaKey(
             dp.ToBN().release(),
             dq.ToBN().release(),
             qi.ToBN().release())) {
-      THROW_ERR_CRYPTO_INVALID_JWK(env, "Invalid JSK RSA key");
+      THROW_ERR_CRYPTO_INVALID_JWK(env, "Invalid JWK RSA key");
       return std::shared_ptr<KeyObjectData>();
     }
   }
@@ -504,21 +513,31 @@ Maybe<bool> GetRsaKeyDetail(
   const BIGNUM* e;  // Public Exponent
   const BIGNUM* n;  // Modulus
 
-  ManagedEVPPKey pkey = key->GetAsymmetricKey();
-  int type = EVP_PKEY_id(pkey.get());
+  ManagedEVPPKey m_pkey = key->GetAsymmetricKey();
+  Mutex::ScopedLock lock(*m_pkey.mutex());
+  int type = EVP_PKEY_id(m_pkey.get());
   CHECK(type == EVP_PKEY_RSA || type == EVP_PKEY_RSA_PSS);
 
-  RSA* rsa = EVP_PKEY_get0_RSA(pkey.get());
+  // TODO(tniessen): Remove the "else" branch once we drop support for OpenSSL
+  // versions older than 1.1.1e via FIPS / dynamic linking.
+  RSA* rsa;
+  if (OpenSSL_version_num() >= 0x1010105fL) {
+    rsa = EVP_PKEY_get0_RSA(m_pkey.get());
+  } else {
+    rsa = static_cast<RSA*>(EVP_PKEY_get0(m_pkey.get()));
+  }
   CHECK_NOT_NULL(rsa);
 
   RSA_get0_key(rsa, &n, &e, nullptr);
 
   size_t modulus_length = BN_num_bytes(n) * CHAR_BIT;
 
-  if (target->Set(
-          env->context(),
-          env->modulus_length_string(),
-          Number::New(env->isolate(), modulus_length)).IsNothing()) {
+  if (target
+          ->Set(
+              env->context(),
+              env->modulus_length_string(),
+              Number::New(env->isolate(), static_cast<double>(modulus_length)))
+          .IsNothing()) {
     return Nothing<bool>();
   }
 
@@ -547,4 +566,3 @@ void Initialize(Environment* env, Local<Object> target) {
 }  // namespace RSAAlg
 }  // namespace crypto
 }  // namespace node
-

@@ -5,7 +5,7 @@
 #ifndef V8_OBJECTS_OBJECT_LIST_MACROS_H_
 #define V8_OBJECTS_OBJECT_LIST_MACROS_H_
 
-#include "torque-generated/instance-types-tq.h"
+#include "torque-generated/instance-types.h"
 
 namespace v8 {
 namespace internal {
@@ -104,7 +104,6 @@ class ZoneForwardList;
   V(DataHandler)                               \
   V(DeoptimizationData)                        \
   V(DependentCode)                             \
-  V(DescriptorArray)                           \
   V(EmbedderDataArray)                         \
   V(EphemeronHashTable)                        \
   V(ExternalOneByteString)                     \
@@ -181,7 +180,6 @@ class ZoneForwardList;
   V(NumberWrapper)                             \
   V(ObjectHashSet)                             \
   V(ObjectHashTable)                           \
-  V(Oddball)                                   \
   V(OrderedHashMap)                            \
   V(OrderedHashSet)                            \
   V(OrderedNameDictionary)                     \

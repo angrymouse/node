@@ -20,9 +20,11 @@ accessible.
 ## Class: `AbortController`
 <!--YAML
 added: v15.0.0
+changes:
+  - version: v15.4.0
+    pr-url: https://github.com/nodejs/node/pull/35949
+    description: No longer experimental.
 -->
-
-> Stability: 1 - Experimental
 
 <!-- type=global -->
 
@@ -72,7 +74,7 @@ added: v15.0.0
 
 The `'abort'` event is emitted when the `abortController.abort()` method
 is called. The callback is invoked with a single object argument with a
-single `type` propety set to `'abort'`:
+single `type` property set to `'abort'`:
 
 ```js
 const ac = new AbortController();
@@ -172,11 +174,13 @@ Used to print to stdout and stderr. See the [`console`][] section.
 ## `Event`
 <!-- YAML
 added: v15.0.0
+changes:
+  - version: v15.4.0
+    pr-url: https://github.com/nodejs/node/pull/35949
+    description: No longer experimental.
 -->
 
 <!-- type=global -->
-
-> Stability: 1 - Experimental
 
 A browser-compatible implementation of the `Event` class. See
 [`EventTarget` and `Event` API][] for more details.
@@ -184,11 +188,13 @@ A browser-compatible implementation of the `Event` class. See
 ## `EventTarget`
 <!-- YAML
 added: v15.0.0
+changes:
+  - version: v15.4.0
+    pr-url: https://github.com/nodejs/node/pull/35949
+    description: No longer experimental.
 -->
 
 <!-- type=global -->
-
-> Stability: 1 - Experimental
 
 A browser-compatible implementation of the `EventTarget` class. See
 [`EventTarget` and `Event` API][] for more details.

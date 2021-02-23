@@ -109,11 +109,15 @@ V8_INLINE Dest bit_cast(Source const& source) {
 }
 
 // Explicitly declare the assignment operator as deleted.
+// Note: This macro is deprecated and will be removed soon. Please explicitly
+// delete the assignment operator instead.
 #define DISALLOW_ASSIGN(TypeName) TypeName& operator=(const TypeName&) = delete
 
 // Explicitly declare the copy constructor and assignment operator as deleted.
 // This also deletes the implicit move constructor and implicit move assignment
 // operator, but still allows to manually define them.
+// Note: This macro is deprecated and will be removed soon. Please explicitly
+// delete the copy constructor and assignment operator instead.
 #define DISALLOW_COPY_AND_ASSIGN(TypeName) \
   TypeName(const TypeName&) = delete;      \
   DISALLOW_ASSIGN(TypeName)
@@ -336,14 +340,14 @@ inline T RoundDown(T x, intptr_t m) {
   STATIC_ASSERT(std::is_integral<T>::value);
   // m must be a power of two.
   DCHECK(m != 0 && ((m & (m - 1)) == 0));
-  return x & -m;
+  return x & static_cast<T>(-m);
 }
 template <intptr_t m, typename T>
 constexpr inline T RoundDown(T x) {
   STATIC_ASSERT(std::is_integral<T>::value);
   // m must be a power of two.
   STATIC_ASSERT(m != 0 && ((m & (m - 1)) == 0));
-  return x & -m;
+  return x & static_cast<T>(-m);
 }
 
 // Return the smallest multiple of m which is >= x.

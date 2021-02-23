@@ -8,7 +8,8 @@ const {
   Transform,
   pipeline,
   PassThrough,
-  Duplex
+  Duplex,
+  addAbortSignal,
 } = require('stream');
 const assert = require('assert');
 const http = require('http');
@@ -469,6 +470,78 @@ const net = require('net');
 }
 
 {
+  // Check aborted signal without values
+  const pipelinePromise = promisify(pipeline);
+  async function run() {
+    const ac = new AbortController();
+    const { signal } = ac;
+    async function* producer() {
+      ac.abort();
+      await Promise.resolve();
+      yield '8';
+    }
+
+    const w = new Writable({
+      write(chunk, encoding, callback) {
+        callback();
+      }
+    });
+    await pipelinePromise(producer, w, { signal });
+  }
+
+  assert.rejects(run, { name: 'AbortError' }).then(common.mustCall());
+}
+
+{
+  // Check aborted signal after init.
+  const pipelinePromise = promisify(pipeline);
+  async function run() {
+    const ac = new AbortController();
+    const { signal } = ac;
+    async function* producer() {
+      yield '5';
+      await Promise.resolve();
+      ac.abort();
+      await Promise.resolve();
+      yield '8';
+    }
+
+    const w = new Writable({
+      write(chunk, encoding, callback) {
+        callback();
+      }
+    });
+    await pipelinePromise(producer, w, { signal });
+  }
+
+  assert.rejects(run, { name: 'AbortError' }).then(common.mustCall());
+}
+
+{
+  // Check pre-aborted signal
+  const pipelinePromise = promisify(pipeline);
+  async function run() {
+    const ac = new AbortController();
+    const { signal } = ac;
+    ac.abort();
+    async function* producer() {
+      yield '5';
+      await Promise.resolve();
+      yield '8';
+    }
+
+    const w = new Writable({
+      write(chunk, encoding, callback) {
+        callback();
+      }
+    });
+    await pipelinePromise(producer, w, { signal });
+  }
+
+  assert.rejects(run, { name: 'AbortError' }).then(common.mustCall());
+}
+
+{
   const read = new Readable({
     read() {}
   });
@@ -627,9 +700,7 @@ const net = require('net');
     await Promise.resolve();
     yield 'hello';
   }, async function*(source) {
-    for await (const chunk of source) {
-      chunk;
-    }
+    for await (const chunk of source) {}
   }, common.mustCall((err) => {
     assert.strictEqual(err, undefined);
   }));
@@ -645,9 +716,7 @@ const net = require('net');
     await Promise.resolve();
     throw new Error('kaboom');
   }, async function*(source) {
-    for await (const chunk of source) {
-      chunk;
-    }
+    for await (const chunk of source) {}
   }, common.mustCall((err) => {
     assert.strictEqual(err.message, 'kaboom');
   }));
@@ -703,7 +772,6 @@ const net = require('net');
     yield 'world';
   }, s, async function(source) {
     for await (const chunk of source) {
-      chunk;
       throw new Error('kaboom');
     }
   }, common.mustCall((err, val) => {
@@ -718,7 +786,6 @@ const net = require('net');
     return ['hello', 'world'];
   }, s, async function*(source) {
     for await (const chunk of source) {
-      chunk;
       throw new Error('kaboom');
     }
   }, common.mustCall((err) => {
@@ -1239,4 +1306,70 @@ const net = require('net');
       assert.strictEqual(flushed, true);
     }),
   );
+}
+{
+  function createThenable() {
+    let counter = 0;
+    return {
+      get then() {
+        if (counter++) {
+          throw new Error('Cannot access `then` more than once');
+        }
+        return Function.prototype;
+      },
+    };
+  }
+
+  pipeline(
+    function* () {
+      yield 0;
+    },
+    createThenable,
+    () => common.mustNotCall(),
+  );
+}
+
+
+{
+  const ac = new AbortController();
+  const r = Readable.from(async function* () {
+    for (let i = 0; i < 10; i++) {
+      await Promise.resolve();
+      yield String(i);
+      if (i === 5) {
+        ac.abort();
+      }
+    }
+  }());
+  let res = '';
+  const w = new Writable({
+    write(chunk, encoding, callback) {
+      res += chunk;
+      callback();
+    }
+  });
+  const cb = common.mustCall((err) => {
+    assert.strictEqual(err.name, 'AbortError');
+    assert.strictEqual(res, '012345');
+    assert.strictEqual(w.destroyed, true);
+    assert.strictEqual(r.destroyed, true);
+    assert.strictEqual(pipelined.destroyed, true);
+  });
+  const pipelined = addAbortSignal(ac.signal, pipeline([r, w], cb));
+}
+
+{
+  pipeline([1, 2, 3], PassThrough({ objectMode: true }),
+           common.mustSucceed(() => {}));
+
+  let res = '';
+  const w = new Writable({
+    write(chunk, encoding, callback) {
+      res += chunk;
+      callback();
+    },
+  });
+  pipeline(['1', '2', '3'], w, common.mustSucceed(() => {
+    assert.strictEqual(res, '123');
+  }));
 }

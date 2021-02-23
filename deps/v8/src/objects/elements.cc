@@ -22,8 +22,6 @@
 #include "src/objects/slots-atomic-inl.h"
 #include "src/objects/slots.h"
 #include "src/utils/utils.h"
-#include "torque-generated/exported-class-definitions-tq-inl.h"
-#include "torque-generated/exported-class-definitions-tq.h"
 
 // Each concrete ElementsAccessor can handle exactly one ElementsKind,
 // several abstract ElementsAccessor classes are used to allow sharing
@@ -179,7 +177,7 @@ void CopyObjectToObjectElements(Isolate* isolate, FixedArrayBase from_base,
   if (raw_copy_size < 0) {
     DCHECK_EQ(kCopyToEndAndInitializeToHole, raw_copy_size);
     copy_size =
-        Min(from_base.length() - from_start, to_base.length() - to_start);
+        std::min(from_base.length() - from_start, to_base.length() - to_start);
     int start = to_start + copy_size;
     int length = to_base.length() - start;
     if (length > 0) {
@@ -252,7 +250,7 @@ void CopyDoubleToObjectElements(Isolate* isolate, FixedArrayBase from_base,
     DisallowHeapAllocation no_allocation;
     DCHECK_EQ(kCopyToEndAndInitializeToHole, raw_copy_size);
     copy_size =
-        Min(from_base.length() - from_start, to_base.length() - to_start);
+        std::min(from_base.length() - from_start, to_base.length() - to_start);
     // Also initialize the area that will be copied over since HeapNumber
     // allocation below can cause an incremental marking step, requiring all
     // existing heap objects to be propertly initialized.
@@ -296,7 +294,7 @@ void CopyDoubleToDoubleElements(FixedArrayBase from_base, uint32_t from_start,
   if (raw_copy_size < 0) {
     DCHECK_EQ(kCopyToEndAndInitializeToHole, raw_copy_size);
     copy_size =
-        Min(from_base.length() - from_start, to_base.length() - to_start);
+        std::min(from_base.length() - from_start, to_base.length() - to_start);
     for (int i = to_start + copy_size; i < to_base.length(); ++i) {
       FixedDoubleArray::cast(to_base).set_the_hole(i);
     }
@@ -542,6 +540,8 @@ template <typename Subclass, typename ElementsTraitsParam>
 class ElementsAccessorBase : public InternalElementsAccessor {
  public:
   ElementsAccessorBase() = default;
+  ElementsAccessorBase(const ElementsAccessorBase&) = delete;
+  ElementsAccessorBase& operator=(const ElementsAccessorBase&) = delete;
 
   using ElementsTraits = ElementsTraitsParam;
   using BackingStore = typename ElementsTraitsParam::BackingStore;
@@ -704,7 +704,7 @@ class ElementsAccessorBase : public InternalElementsAccessor {
 
     // Check whether the backing store should be shrunk.
     uint32_t capacity = backing_store->length();
-    old_length = Min(old_length, capacity);
+    old_length = std::min(old_length, capacity);
     if (length == 0) {
       array->initialize_elements();
     } else if (length <= capacity) {
@@ -733,7 +733,7 @@ class ElementsAccessorBase : public InternalElementsAccessor {
       }
     } else {
       // Check whether the backing store should be expanded.
-      capacity = Max(length, JSObject::NewElementsCapacity(capacity));
+      capacity = std::max(length, JSObject::NewElementsCapacity(capacity));
       Subclass::GrowCapacityAndConvertImpl(array, capacity);
     }
 
@@ -1325,9 +1325,6 @@ class ElementsAccessorBase : public InternalElementsAccessor {
                                                         uint32_t length) {
     UNREACHABLE();
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ElementsAccessorBase);
 };
 
 class DictionaryElementsAccessor
@@ -1423,7 +1420,7 @@ class DictionaryElementsAccessor
     DisallowHeapAllocation no_gc;
     NumberDictionary dict = NumberDictionary::cast(backing_store);
     if (!dict.requires_slow_elements()) return false;
-    const Isolate* isolate = GetIsolateForPtrCompr(holder);
+    IsolateRoot isolate = GetIsolateForPtrCompr(holder);
     ReadOnlyRoots roots = holder.GetReadOnlyRoots(isolate);
     for (InternalIndex i : dict.IterateEntries()) {
       Object key = dict.KeyAt(isolate, i);
@@ -1812,7 +1809,7 @@ class DictionaryElementsAccessor
       if (k.Number() > NumberDictionary::kRequiresSlowElementsLimit) {
         requires_slow_elements = true;
       } else {
-        max_key = Max(max_key, Smi::ToInt(k));
+        max_key = std::max(max_key, Smi::ToInt(k));
       }
     }
     if (requires_slow_elements) {
@@ -3627,12 +3624,12 @@ class TypedElementsAccessor
     Handle<JSTypedArray> destination_ta =
         Handle<JSTypedArray>::cast(destination);
     DCHECK_LE(offset + length, destination_ta->length());
-    CHECK(!destination_ta->WasDetached());
 
     if (length == 0) return *isolate->factory()->undefined_value();
 
     // All conversions from TypedArrays can be done without allocation.
     if (source->IsJSTypedArray()) {
+      CHECK(!destination_ta->WasDetached());
       Handle<JSTypedArray> source_ta = Handle<JSTypedArray>::cast(source);
       ElementsKind source_kind = source_ta->GetElementsKind();
       bool source_is_bigint =
@@ -3647,6 +3644,7 @@ class TypedElementsAccessor
         return *isolate->factory()->undefined_value();
       }
     } else if (source->IsJSArray()) {
+      CHECK(!destination_ta->WasDetached());
       // Fast cases for packed numbers kinds where we don't need to allocate.
       Handle<JSArray> source_js_array = Handle<JSArray>::cast(source);
       size_t current_length;

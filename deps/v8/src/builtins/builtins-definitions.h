@@ -8,7 +8,7 @@
 #include "builtins-generated/bytecodes-builtins-list.h"
 
 // include generated header
-#include "torque-generated/builtin-definitions-tq.h"
+#include "torque-generated/builtin-definitions.h"
 
 namespace v8 {
 namespace internal {
@@ -138,6 +138,10 @@ namespace internal {
   TFC(CompileLazyDeoptimizedCode, JSTrampoline)                                \
   TFC(InstantiateAsmJs, JSTrampoline)                                          \
   ASM(NotifyDeoptimized, Dummy)                                                \
+  ASM(DeoptimizationEntry_Eager, DeoptimizationEntry)                          \
+  ASM(DeoptimizationEntry_Soft, DeoptimizationEntry)                           \
+  ASM(DeoptimizationEntry_Bailout, DeoptimizationEntry)                        \
+  ASM(DeoptimizationEntry_Lazy, DeoptimizationEntry)                           \
                                                                                \
   /* Trampolines called when returning from a deoptimization that expects   */ \
   /* to continue in a JavaScript builtin to finish the functionality of a   */ \
@@ -189,9 +193,9 @@ namespace internal {
                                                                                \
   /* Type conversions */                                                       \
   TFC(ToNumber, TypeConversion)                                                \
+  TFC(PlainPrimitiveToNumber, TypeConversionNoContext)                         \
   TFC(ToNumberConvertBigInt, TypeConversion)                                   \
   TFC(Typeof, Typeof)                                                          \
-  TFC(GetSuperConstructor, Typeof)                                             \
   TFC(BigIntToI64, BigIntToI64)                                                \
   TFC(BigIntToI32Pair, BigIntToI32Pair)                                        \
   TFC(I64ToBigInt, I64ToBigInt)                                                \
@@ -341,8 +345,6 @@ namespace internal {
   /* ES #sec-arraybuffer-constructor */                                        \
   CPP(ArrayBufferConstructor)                                                  \
   CPP(ArrayBufferConstructor_DoNotInitialize)                                  \
-  CPP(ArrayBufferPrototypeGetByteLength)                                       \
-  CPP(ArrayBufferIsView)                                                       \
   CPP(ArrayBufferPrototypeSlice)                                               \
                                                                                \
   /* AsyncFunction */                                                          \
@@ -365,6 +367,8 @@ namespace internal {
                                                                                \
   /* CallSite */                                                               \
   CPP(CallSitePrototypeGetColumnNumber)                                        \
+  CPP(CallSitePrototypeGetEnclosingColumnNumber)                               \
+  CPP(CallSitePrototypeGetEnclosingLineNumber)                                 \
   CPP(CallSitePrototypeGetEvalOrigin)                                          \
   CPP(CallSitePrototypeGetFileName)                                            \
   CPP(CallSitePrototypeGetFunction)                                            \
@@ -536,6 +540,7 @@ namespace internal {
   TFH(LoadIC_Noninlined, LoadWithVector)                                       \
   TFH(LoadICTrampoline, Load)                                                  \
   TFH(LoadICTrampoline_Megamorphic, Load)                                      \
+  TFH(LoadSuperIC, LoadWithReceiverAndVector)                                  \
   TFH(KeyedLoadIC, LoadWithVector)                                             \
   TFH(KeyedLoadIC_Megamorphic, LoadWithVector)                                 \
   TFH(KeyedLoadICTrampoline, Load)                                             \
@@ -721,7 +726,6 @@ namespace internal {
   TFS(SetOrSetIteratorToList, kSource)                                         \
                                                                                \
   /* SharedArrayBuffer */                                                      \
-  CPP(SharedArrayBufferPrototypeGetByteLength)                                 \
   CPP(SharedArrayBufferPrototypeSlice)                                         \
   TFJ(AtomicsLoad, 2, kReceiver, kArray, kIndex)                               \
   TFJ(AtomicsStore, 3, kReceiver, kArray, kIndex, kValue)                      \
@@ -761,9 +765,6 @@ namespace internal {
   TFJ(StringPrototypeSearch, 1, kReceiver, kRegexp)                            \
   /* ES6 #sec-string.prototype.split */                                        \
   TFJ(StringPrototypeSplit, kDontAdaptArgumentsSentinel)                       \
-  TFJ(StringPrototypeTrim, kDontAdaptArgumentsSentinel)                        \
-  TFJ(StringPrototypeTrimEnd, kDontAdaptArgumentsSentinel)                     \
-  TFJ(StringPrototypeTrimStart, kDontAdaptArgumentsSentinel)                   \
   /* ES6 #sec-string.raw */                                                    \
   CPP(StringRaw)                                                               \
                                                                                \
@@ -812,6 +813,7 @@ namespace internal {
   TFS(WasmAllocateArrayWithRtt, kMap, kLength, kElementSize)                   \
   TFC(WasmI32AtomicWait32, WasmI32AtomicWait32)                                \
   TFC(WasmI64AtomicWait32, WasmI64AtomicWait32)                                \
+  TFS(WasmAllocatePair, kValue1, kValue2)                                      \
                                                                                \
   /* WeakMap */                                                                \
   TFJ(WeakMapConstructor, kDontAdaptArgumentsSentinel)                         \

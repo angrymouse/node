@@ -285,7 +285,7 @@ bool TransitionsAccessor::IsMatchingMap(Map target, Name name,
                                         PropertyKind kind,
                                         PropertyAttributes attributes) {
   InternalIndex descriptor = target.LastAdded();
-  DescriptorArray descriptors = target.instance_descriptors();
+  DescriptorArray descriptors = target.instance_descriptors(kRelaxedLoad);
   Name key = descriptors.GetKey(descriptor);
   if (key != name) return false;
   return descriptors.GetDetails(descriptor)
@@ -330,7 +330,7 @@ Handle<WeakFixedArray> TransitionArray::GrowPrototypeTransitionArray(
     Handle<WeakFixedArray> array, int new_capacity, Isolate* isolate) {
   // Grow array by factor 2 up to MaxCachedPrototypeTransitions.
   int capacity = array->length() - kProtoTransitionHeaderSize;
-  new_capacity = Min(kMaxCachedPrototypeTransitions, new_capacity);
+  new_capacity = std::min({kMaxCachedPrototypeTransitions, new_capacity});
   DCHECK_GT(new_capacity, capacity);
   int grow_by = new_capacity - capacity;
   array = isolate->factory()->CopyWeakFixedArrayAndGrow(array, grow_by);
@@ -530,7 +530,8 @@ void TransitionsAccessor::CheckNewTransitionsAreConsistent(
   TransitionArray new_transitions = TransitionArray::cast(transitions);
   for (int i = 0; i < old_transitions.number_of_transitions(); i++) {
     Map target = old_transitions.GetTarget(i);
-    if (target.instance_descriptors() == map_.instance_descriptors()) {
+    if (target.instance_descriptors(kRelaxedLoad) ==
+        map_.instance_descriptors(kRelaxedLoad)) {
       Name key = old_transitions.GetKey(i);
       int new_target_index;
       if (IsSpecialTransition(ReadOnlyRoots(isolate_), key)) {
@@ -644,8 +645,8 @@ void TransitionArray::Sort() {
         temp_kind = details.kind();
         temp_attributes = details.attributes();
       }
-      int cmp = CompareKeys(temp_key, temp_key.Hash(), temp_kind,
-                            temp_attributes, key, key.Hash(), kind, attributes);
+      int cmp = CompareKeys(temp_key, temp_key.hash(), temp_kind,
+                            temp_attributes, key, key.hash(), kind, attributes);
       if (cmp > 0) {
         SetKey(j + 1, temp_key);
         SetRawTarget(j + 1, temp_target);

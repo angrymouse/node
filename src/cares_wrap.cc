@@ -1493,7 +1493,7 @@ class QueryAaaaWrap: public QueryWrap {
 class QueryCaaWrap: public QueryWrap {
  public:
   QueryCaaWrap(ChannelWrap* channel, Local<Object> req_wrap_obj)
-      : QueryWrap(channel, req_wrap_obj, "resolve6") {
+      : QueryWrap(channel, req_wrap_obj, "resolveCaa") {
   }
 
   int Send(const char* name) override {
@@ -1901,7 +1901,7 @@ void AfterGetAddrInfo(uv_getaddrinfo_t* req, int status, struct addrinfo* res) {
     Null(env->isolate())
   };
 
-  uint64_t n = 0;
+  uint32_t n = 0;
   const bool verbatim = req_wrap->verbatim();
 
   if (status == 0) {
@@ -2345,32 +2345,17 @@ void Initialize(Local<Object> target,
   Local<FunctionTemplate> aiw =
       BaseObject::MakeLazilyInitializedJSTemplate(env);
   aiw->Inherit(AsyncWrap::GetConstructorTemplate(env));
-  Local<String> addrInfoWrapString =
-      FIXED_ONE_BYTE_STRING(env->isolate(), "GetAddrInfoReqWrap");
-  aiw->SetClassName(addrInfoWrapString);
-  target->Set(env->context(),
-              addrInfoWrapString,
-              aiw->GetFunction(context).ToLocalChecked()).Check();
+  env->SetConstructorFunction(target, "GetAddrInfoReqWrap", aiw);
 
   Local<FunctionTemplate> niw =
       BaseObject::MakeLazilyInitializedJSTemplate(env);
   niw->Inherit(AsyncWrap::GetConstructorTemplate(env));
-  Local<String> nameInfoWrapString =
-      FIXED_ONE_BYTE_STRING(env->isolate(), "GetNameInfoReqWrap");
-  niw->SetClassName(nameInfoWrapString);
-  target->Set(env->context(),
-              nameInfoWrapString,
-              niw->GetFunction(context).ToLocalChecked()).Check();
+  env->SetConstructorFunction(target, "GetNameInfoReqWrap", niw);
 
   Local<FunctionTemplate> qrw =
       BaseObject::MakeLazilyInitializedJSTemplate(env);
   qrw->Inherit(AsyncWrap::GetConstructorTemplate(env));
-  Local<String> queryWrapString =
-      FIXED_ONE_BYTE_STRING(env->isolate(), "QueryReqWrap");
-  qrw->SetClassName(queryWrapString);
-  target->Set(env->context(),
-              queryWrapString,
-              qrw->GetFunction(context).ToLocalChecked()).Check();
+  env->SetConstructorFunction(target, "QueryReqWrap", qrw);
 
   Local<FunctionTemplate> channel_wrap =
       env->NewFunctionTemplate(ChannelWrap::New);
@@ -2397,11 +2382,7 @@ void Initialize(Local<Object> target,
   env->SetProtoMethod(channel_wrap, "setLocalAddress", SetLocalAddress);
   env->SetProtoMethod(channel_wrap, "cancel", Cancel);
 
-  Local<String> channelWrapString =
-      FIXED_ONE_BYTE_STRING(env->isolate(), "ChannelWrap");
-  channel_wrap->SetClassName(channelWrapString);
-  target->Set(env->context(), channelWrapString,
-              channel_wrap->GetFunction(context).ToLocalChecked()).Check();
+  env->SetConstructorFunction(target, "ChannelWrap", channel_wrap);
 }
 
 }  // anonymous namespace

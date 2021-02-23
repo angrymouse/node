@@ -96,12 +96,13 @@ void IsolateData::DeserializeProperties(const std::vector<size_t>* indexes) {
 #define VS(PropertyName, StringValue) V(String, PropertyName)
 #define V(TypeName, PropertyName)                                              \
   do {                                                                         \
-    MaybeLocal<TypeName> field =                                               \
+    MaybeLocal<TypeName> maybe_field =                                         \
         isolate_->GetDataFromSnapshotOnce<TypeName>((*indexes)[i++]);          \
-    if (field.IsEmpty()) {                                                     \
+    Local<TypeName> field;                                                     \
+    if (!maybe_field.ToLocal(&field)) {                                        \
       fprintf(stderr, "Failed to deserialize " #PropertyName "\n");            \
     }                                                                          \
-    PropertyName##_.Set(isolate_, field.ToLocalChecked());                     \
+    PropertyName##_.Set(isolate_, field);                                      \
   } while (0);
   PER_ISOLATE_PRIVATE_SYMBOL_PROPERTIES(VP)
   PER_ISOLATE_SYMBOL_PROPERTIES(VY)
@@ -112,12 +113,13 @@ void IsolateData::DeserializeProperties(const std::vector<size_t>* indexes) {
 #undef VP
 
   for (size_t j = 0; j < AsyncWrap::PROVIDERS_LENGTH; j++) {
-    MaybeLocal<String> field =
+    MaybeLocal<String> maybe_field =
         isolate_->GetDataFromSnapshotOnce<String>((*indexes)[i++]);
-    if (field.IsEmpty()) {
+    Local<String> field;
+    if (!maybe_field.ToLocal(&field)) {
       fprintf(stderr, "Failed to deserialize AsyncWrap provider %zu\n", j);
     }
-    async_wrap_providers_[j].Set(isolate_, field.ToLocalChecked());
+    async_wrap_providers_[j].Set(isolate_, field);
   }
 }
 
@@ -209,10 +211,7 @@ void IsolateData::MemoryInfo(MemoryTracker* tracker) const {
 #define V(PropertyName, StringValue)                                           \
   tracker->TrackField(#PropertyName, PropertyName());
   PER_ISOLATE_SYMBOL_PROPERTIES(V)
-#undef V
 
-#define V(PropertyName, StringValue)                                           \
-  tracker->TrackField(#PropertyName, PropertyName());
   PER_ISOLATE_STRING_PROPERTIES(V)
 #undef V
 
@@ -225,10 +224,6 @@ void IsolateData::MemoryInfo(MemoryTracker* tracker) const {
   tracker->TrackFieldWithSize(
       "platform", sizeof(*platform_), "MultiIsolatePlatform");
   // TODO(joyeecheung): implement MemoryRetainer in the option classes.
-}
-
-void InitThreadLocalOnce() {
-  CHECK_EQ(0, uv_key_create(&Environment::thread_local_env));
 }
 
 void TrackingTraceStateObserver::UpdateTraceCategoryState() {
@@ -277,6 +272,29 @@ void Environment::CreateProperties() {
       per_context_bindings->Get(ctx, primordials_string()).ToLocalChecked();
   CHECK(primordials->IsObject());
   set_primordials(primordials.As<Object>());
+
+  Local<String> prototype_string =
+      FIXED_ONE_BYTE_STRING(isolate(), "prototype");
+
+#define V(EnvPropertyName, PrimordialsPropertyName)                            \
+  {                                                                            \
+    Local<Value> ctor =                                                        \
+        primordials.As<Object>()                                               \
+            ->Get(ctx,                                                         \
+                  FIXED_ONE_BYTE_STRING(isolate(), PrimordialsPropertyName))   \
+            .ToLocalChecked();                                                 \
+    CHECK(ctor->IsObject());                                                   \
+    Local<Value> prototype =                                                   \
+        ctor.As<Object>()->Get(ctx, prototype_string).ToLocalChecked();        \
+    CHECK(prototype->IsObject());                                              \
+    set_##EnvPropertyName(prototype.As<Object>());                             \
+  }
+
+  V(primordials_safe_map_prototype_object, "SafeMap");
+  V(primordials_safe_set_prototype_object, "SafeSet");
+  V(primordials_safe_weak_map_prototype_object, "SafeWeakMap");
+  V(primordials_safe_weak_set_prototype_object, "SafeWeakSet");
+#undef V
 
   Local<Object> process_object =
       node::CreateProcessObject(this).FromMaybe(Local<Object>());
@@ -350,16 +368,18 @@ Environment::Environment(IsolateData* isolate_data,
 
   set_env_vars(per_process::system_environment);
   // TODO(joyeecheung): pass Isolate* and env_vars to it instead of the entire
-  // env
+  // env, when the recursive dependency inclusion in "debug-utils.h" is
+  // resolved.
   enabled_debug_list_.Parse(this);
 
   // We create new copies of the per-Environment option sets, so that it is
   // easier to modify them after Environment creation. The defaults are
   // part of the per-Isolate option set, for which in turn the defaults are
   // part of the per-process option set.
-  options_.reset(new EnvironmentOptions(*isolate_data->options()->per_env));
-  inspector_host_port_.reset(
-      new ExclusiveAccess<HostPort>(options_->debug_options().host_port));
+  options_ = std::make_shared<EnvironmentOptions>(
+      *isolate_data->options()->per_env);
+  inspector_host_port_ = std::make_shared<ExclusiveAccess<HostPort>>(
+      options_->debug_options().host_port);
 
   if (!(flags_ & EnvironmentFlags::kOwnsProcessState)) {
     set_abort_on_uncaught_exception(false);
@@ -369,10 +389,6 @@ Environment::Environment(IsolateData* isolate_data,
   // We can only create the inspector agent after having cloned the options.
   inspector_agent_ = std::make_unique<inspector::Agent>(this);
 #endif
-
-  static uv_once_t init_once = UV_ONCE_INIT;
-  uv_once(&init_once, InitThreadLocalOnce);
-  uv_key_set(&thread_local_env, this);
 
   if (tracing::AgentWriterHandle* writer = GetTracingAgentWriter()) {
     trace_state_observer_ = std::make_unique<TrackingTraceStateObserver>(this);
@@ -400,10 +416,6 @@ Environment::Environment(IsolateData* isolate_data,
                                       "args",
                                       std::move(traced_value));
   }
-
-  // This adjusts the return value of base_object_count() so that tests that
-  // check the count do not have to account for internally created BaseObjects.
-  initial_base_object_count_ = base_object_count();
 }
 
 Environment::Environment(IsolateData* isolate_data,
@@ -446,10 +458,6 @@ void Environment::InitializeMainContext(Local<Context> context,
                            per_process::node_start_time);
   performance_state_->Mark(performance::NODE_PERFORMANCE_MILESTONE_V8_START,
                            performance::performance_v8_start);
-
-  // This adjusts the return value of base_object_count() so that tests that
-  // check the count do not have to account for internally created BaseObjects.
-  initial_base_object_count_ = base_object_count();
 }
 
 Environment::~Environment() {
@@ -545,6 +553,8 @@ void Environment::InitializeLibuv() {
       [](uv_async_t* async) {
         Environment* env = ContainerOf(
             &Environment::task_queues_async_, async);
+        HandleScope handle_scope(env->isolate());
+        Context::Scope context_scope(env->context());
         env->RunAndClearNativeImmediates();
       });
   uv_unref(reinterpret_cast<uv_handle_t*>(&task_queues_async_));
@@ -638,7 +648,6 @@ void Environment::RunCleanup() {
   TraceEventScope trace_scope(TRACING_CATEGORY_NODE1(environment),
                               "RunCleanup", this);
   bindings_.clear();
-  initial_base_object_count_ = 0;
   CleanupHandles();
 
   while (!cleanup_hooks_.empty() ||
@@ -1143,8 +1152,6 @@ void AsyncHooks::grow_async_ids_stack() {
       async_ids_stack_.GetJSArray()).Check();
 }
 
-uv_key_t Environment::thread_local_env = {};
-
 void Environment::Exit(int exit_code) {
   if (options()->trace_exit) {
     HandleScope handle_scope(isolate());
@@ -1244,6 +1251,7 @@ EnvSerializeInfo Environment::Serialize(SnapshotCreator* creator) {
   EnvSerializeInfo info;
   Local<Context> ctx = context();
 
+  SerializeBindingData(this, creator, &info);
   // Currently all modules are compiled without cache in builtin snapshot
   // builder.
   info.native_modules = std::vector<std::string>(
@@ -1310,6 +1318,9 @@ std::ostream& operator<<(std::ostream& output,
 
 std::ostream& operator<<(std::ostream& output, const EnvSerializeInfo& i) {
   output << "{\n"
+         << "// -- bindings begins --\n"
+         << i.bindings << ",\n"
+         << "// -- bindings ends --\n"
          << "// -- native_modules begins --\n"
          << i.native_modules << ",\n"
          << "// -- native_modules ends --\n"
@@ -1335,8 +1346,32 @@ std::ostream& operator<<(std::ostream& output, const EnvSerializeInfo& i) {
   return output;
 }
 
+void Environment::EnqueueDeserializeRequest(DeserializeRequestCallback cb,
+                                            Local<Object> holder,
+                                            int index,
+                                            InternalFieldInfo* info) {
+  DeserializeRequest request{cb, {isolate(), holder}, index, info};
+  deserialize_requests_.push_back(std::move(request));
+}
+
+void Environment::RunDeserializeRequests() {
+  HandleScope scope(isolate());
+  Local<Context> ctx = context();
+  Isolate* is = isolate();
+  while (!deserialize_requests_.empty()) {
+    DeserializeRequest request(std::move(deserialize_requests_.front()));
+    deserialize_requests_.pop_front();
+    Local<Object> holder = request.holder.Get(is);
+    request.cb(ctx, holder, request.index, request.info);
+    request.holder.Reset();
+    request.info->Delete();
+  }
+}
+
 void Environment::DeserializeProperties(const EnvSerializeInfo* info) {
   Local<Context> ctx = context();
+
+  RunDeserializeRequests();
 
   native_modules_in_snapshot = info->native_modules;
   async_hooks_.Deserialize(ctx);
@@ -1354,17 +1389,17 @@ void Environment::DeserializeProperties(const EnvSerializeInfo* info) {
   const std::vector<PropInfo>& templates = info->persistent_templates;
   size_t i = 0;  // index to the array
   size_t id = 0;
-#define V(PropertyName, TypeName)                                              \
+#define SetProperty(PropertyName, TypeName, vector, type, from)                \
   do {                                                                         \
-    if (templates.size() > i && id == templates[i].id) {                       \
-      const PropInfo& d = templates[i];                                        \
+    if (vector.size() > i && id == vector[i].id) {                             \
+      const PropInfo& d = vector[i];                                           \
       DCHECK_EQ(d.name, #PropertyName);                                        \
       MaybeLocal<TypeName> maybe_field =                                       \
-          isolate_->GetDataFromSnapshotOnce<TypeName>(d.index);                \
+          from->GetDataFromSnapshotOnce<TypeName>(d.index);                    \
       Local<TypeName> field;                                                   \
       if (!maybe_field.ToLocal(&field)) {                                      \
         fprintf(stderr,                                                        \
-                "Failed to deserialize environment template " #PropertyName    \
+                "Failed to deserialize environment " #type " " #PropertyName   \
                 "\n");                                                         \
       }                                                                        \
       set_##PropertyName(field);                                               \
@@ -1372,32 +1407,19 @@ void Environment::DeserializeProperties(const EnvSerializeInfo* info) {
     }                                                                          \
   } while (0);                                                                 \
   id++;
+#define V(PropertyName, TypeName) SetProperty(PropertyName, TypeName,          \
+                                              templates, template, isolate_)
   ENVIRONMENT_STRONG_PERSISTENT_TEMPLATES(V);
 #undef V
 
   i = 0;  // index to the array
   id = 0;
   const std::vector<PropInfo>& values = info->persistent_values;
-#define V(PropertyName, TypeName)                                              \
-  do {                                                                         \
-    if (values.size() > i && id == values[i].id) {                             \
-      const PropInfo& d = values[i];                                           \
-      DCHECK_EQ(d.name, #PropertyName);                                        \
-      MaybeLocal<TypeName> maybe_field =                                       \
-          ctx->GetDataFromSnapshotOnce<TypeName>(d.index);                     \
-      Local<TypeName> field;                                                   \
-      if (!maybe_field.ToLocal(&field)) {                                      \
-        fprintf(stderr,                                                        \
-                "Failed to deserialize environment value " #PropertyName       \
-                "\n");                                                         \
-      }                                                                        \
-      set_##PropertyName(field);                                               \
-      i++;                                                                     \
-    }                                                                          \
-  } while (0);                                                                 \
-  id++;
+#define V(PropertyName, TypeName) SetProperty(PropertyName, TypeName,          \
+                                              values, value, ctx)
   ENVIRONMENT_STRONG_PERSISTENT_VALUES(V);
 #undef V
+#undef SetProperty
 
   MaybeLocal<Context> maybe_ctx_from_snapshot =
       ctx->GetDataFromSnapshotOnce<Context>(info->context);

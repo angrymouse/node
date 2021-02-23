@@ -197,7 +197,7 @@ added: v0.0.1
 
 * `callback` {Function} The function to call when the timer elapses.
 * `delay` {number} The number of milliseconds to wait before calling the
-  `callback`. **Default**: `1`.
+  `callback`. **Default:** `1`.
 * `...args` {any} Optional arguments to pass when the `callback` is called.
 * Returns: {Timeout} for use with [`clearInterval()`][]
 
@@ -215,7 +215,7 @@ added: v0.0.1
 
 * `callback` {Function} The function to call when the timer elapses.
 * `delay` {number} The number of milliseconds to wait before calling the
-  `callback`. **Default**: `1`.
+  `callback`. **Default:** `1`.
 * `...args` {any} Optional arguments to pass when the `callback` is called.
 * Returns: {Timeout} for use with [`clearTimeout()`][]
 
@@ -321,6 +321,9 @@ added: v0.0.1
 Cancels a `Timeout` object created by [`setTimeout()`][].
 
 ## Timers Promises API
+<!-- YAML
+added: v15.0.0
+-->
 
 > Stability: 1 - Experimental
 
@@ -333,26 +336,64 @@ const timersPromises = require('timers/promises');
 ```
 
 ### `timersPromises.setTimeout([delay[, value[, options]]])`
+<!-- YAML
+added: v15.0.0
+-->
 
 * `delay` {number} The number of milliseconds to wait before resolving the
-  `Promise`. **Default**: `1`.
+  `Promise`. **Default:** `1`.
 * `value` {any} A value with which the `Promise` is resolved.
 * `options` {Object}
   * `ref` {boolean} Set to `false` to indicate that the scheduled `Timeout`
     should not require the Node.js event loop to remain active.
-    **Default**: `true`.
+    **Default:** `true`.
   * `signal` {AbortSignal} An optional `AbortSignal` that can be used to
     cancel the scheduled `Timeout`.
 
 ### `timersPromises.setImmediate([value[, options]])`
+<!-- YAML
+added: v15.0.0
+-->
 
 * `value` {any} A value with which the `Promise` is resolved.
 * `options` {Object}
   * `ref` {boolean} Set to `false` to indicate that the scheduled `Immediate`
     should not require the Node.js event loop to remain active.
-    **Default**: `true`.
+    **Default:** `true`.
   * `signal` {AbortSignal} An optional `AbortSignal` that can be used to
     cancel the scheduled `Immediate`.
+
+### `timersPromises.setInterval([delay[, value[, options]]])`
+<!-- YAML
+added: v15.9.0
+-->
+
+Returns an async iterator that generates values in an interval of `delay` ms.
+
+* `delay` {number} The number of milliseconds to wait between iterations.
+   **Default:** `1`.
+* `value` {any} A value with which the iterator returns.
+* `options` {Object}
+  * `ref` {boolean} Set to `false` to indicate that the scheduled `Timeout`
+    between iterations should not require the Node.js event loop to
+    remain active.
+    **Default:** `true`.
+  * `signal` {AbortSignal} An optional `AbortSignal` that can be used to
+    cancel the scheduled `Timeout` between operations.
+
+```js
+(async function() {
+  const { setInterval } = require('timers/promises');
+  const interval = 100;
+  for await (const startTime of setInterval(interval, Date.now())) {
+    const now = Date.now();
+    console.log(now);
+    if ((now - startTime) > 1000)
+      break;
+  }
+  console.log(Date.now());
+})();
+```
 
 [Event Loop]: https://nodejs.org/en/docs/guides/event-loop-timers-and-nexttick/#setimmediate-vs-settimeout
 [`AbortController`]: globals.md#globals_class_abortcontroller

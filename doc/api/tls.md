@@ -370,6 +370,48 @@ The first 3 are enabled by default. The last 2 `CCM`-based suites are supported
 by TLSv1.3 because they may be more performant on constrained systems, but they
 are not enabled by default since they offer less security.
 
+## X509 Certificate Error codes
+
+Multiple functions can fail due to certificate errors that are reported by
+OpenSSL. In such a case, the function provides an {Error} via its callback that
+has the property `code` which can take one of the following values:
+
+<!--
+values are taken from src/crypto/crypto_common.cc
+description are taken from deps/openssl/openssl/crypto/x509/x509_txt.c
+-->
+* `'UNABLE_TO_GET_ISSUER_CERT'`: Unable to get issuer certificate.
+* `'UNABLE_TO_GET_CRL'`: Unable to get certificate CRL.
+* `'UNABLE_TO_DECRYPT_CERT_SIGNATURE'`: Unable to decrypt certificate's
+  signature.
+* `'UNABLE_TO_DECRYPT_CRL_SIGNATURE'`: Unable to decrypt CRL's signature.
+* `'UNABLE_TO_DECODE_ISSUER_PUBLIC_KEY'`: Unable to decode issuer public key.
+* `'CERT_SIGNATURE_FAILURE'`: Certificate signature failure.
+* `'CRL_SIGNATURE_FAILURE'`: CRL signature failure.
+* `'CERT_NOT_YET_VALID'`: Certificate is not yet valid.
+* `'CERT_HAS_EXPIRED'`: Certificate has expired.
+* `'CRL_NOT_YET_VALID'`: CRL is not yet valid.
+* `'CRL_HAS_EXPIRED'`: CRL has expired.
+* `'ERROR_IN_CERT_NOT_BEFORE_FIELD'`: Format error in certificate's notBefore
+  field.
+* `'ERROR_IN_CERT_NOT_AFTER_FIELD'`: Format error in certificate's notAfter
+  field.
+* `'ERROR_IN_CRL_LAST_UPDATE_FIELD'`: Format error in CRL's lastUpdate field.
+* `'ERROR_IN_CRL_NEXT_UPDATE_FIELD'`: Format error in CRL's nextUpdate field.
+* `'OUT_OF_MEM'`: Out of memory.
+* `'DEPTH_ZERO_SELF_SIGNED_CERT'`: Self signed certificate.
+* `'SELF_SIGNED_CERT_IN_CHAIN'`: Self signed certificate in certificate chain.
+* `'UNABLE_TO_GET_ISSUER_CERT_LOCALLY'`: Unable to get local issuer certificate.
+* `'UNABLE_TO_VERIFY_LEAF_SIGNATURE'`: Unable to verify the first certificate.
+* `'CERT_CHAIN_TOO_LONG'`: Certificate chain too long.
+* `'CERT_REVOKED'`: Certificate revoked.
+* `'INVALID_CA'`: Invalid CA certificate.
+* `'PATH_LENGTH_EXCEEDED'`: Path length constraint exceeded.
+* `'INVALID_PURPOSE'`: Unsupported certificate purpose.
+* `'CERT_UNTRUSTED'`: Certificate not trusted.
+* `'CERT_REJECTED'`: Certificate rejected.
+* `'HOSTNAME_MISMATCH'`: Hostname mismatch.
+
 ## Class: `tls.CryptoStream`
 <!-- YAML
 added: v0.3.4
@@ -627,6 +669,9 @@ added: v0.5.3
 The `server.addContext()` method adds a secure context that will be used if
 the client request's SNI name matches the supplied `hostname` (or wildcard).
 
+When there are multiple matching contexts, the most recently added one is
+used.
+
 ### `server.address()`
 <!-- YAML
 added: v0.6.0
@@ -644,7 +689,7 @@ added: v0.3.2
 -->
 
 * `callback` {Function} A listener callback that will be registered to listen
-for the server instance's `'close'` event.
+  for the server instance's `'close'` event.
 * Returns: {tls.Server}
 
 The `server.close()` method stops the server from accepting new connections.
@@ -901,6 +946,41 @@ added: v0.11.4
 Always returns `true`. This may be used to distinguish TLS sockets from regular
 `net.Socket` instances.
 
+### `tlsSocket.exportKeyingMaterial(length, label[, context])`
+<!-- YAML
+added:
+ - v13.10.0
+ - v12.17.0
+-->
+
+* `length` {number} number of bytes to retrieve from keying material
+* `label` {string} an application specific label, typically this will be a
+  value from the
+  [IANA Exporter Label Registry](https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml#exporter-labels).
+* `context` {Buffer} Optionally provide a context.
+
+* Returns: {Buffer} requested bytes of the keying material
+
+Keying material is used for validations to prevent different kind of attacks in
+network protocols, for example in the specifications of IEEE 802.1X.
+
+Example
+
+```js
+const keyingMaterial = tlsSocket.exportKeyingMaterial(
+  128,
+  'client finished');
+
+/**
+ Example return value of keyingMaterial:
+ <Buffer 76 26 af 99 c5 56 8e 42 09 91 ef 9f 93 cb ad 6c 7b 65 f8 53 f1 d8 d9
+    12 5a 33 b8 b5 25 df 7b 37 9f e0 e2 4f b8 67 83 a3 2f cd 5d 41 42 4c 91
+    74 ef 2c ... 78 more bytes>
+*/
+```
+See the OpenSSL [`SSL_export_keying_material`][] documentation for more
+information.
+
 ### `tlsSocket.getCertificate()`
 <!-- YAML
 added: v11.2.0
@@ -975,8 +1055,8 @@ added: v9.9.0
 -->
 
 * Returns: {Buffer|undefined} The latest `Finished` message that has been
-sent to the socket as part of a SSL/TLS handshake, or `undefined` if
-no `Finished` message has been sent yet.
+  sent to the socket as part of a SSL/TLS handshake, or `undefined` if
+  no `Finished` message has been sent yet.
 
 As the `Finished` messages are message digests of the complete handshake
 (with a total of 192 bits for TLS 1.0 and more for SSL 3.0), they can
@@ -1033,7 +1113,7 @@ certificate.
    `'2A:7A:C2:DD:...'`.
 * `ext_key_usage` {Array} (Optional) The extended key usage, a set of OIDs.
 * `subjectaltname` {string} (Optional) A string containing concatenated names
- for the subject, an alternative to the `subject` names.
+   for the subject, an alternative to the `subject` names.
 * `infoAccess` {Array} (Optional) An array describing the AuthorityInfoAccess,
    used with OCSP.
 * `issuerCertificate` {Object} (Optional) The issuer certificate object. For
@@ -1099,8 +1179,8 @@ added: v9.9.0
 -->
 
 * Returns: {Buffer|undefined} The latest `Finished` message that is expected
-or has actually been received from the socket as part of a SSL/TLS handshake,
-or `undefined` if there is no `Finished` message so far.
+  or has actually been received from the socket as part of a SSL/TLS handshake,
+  or `undefined` if there is no `Finished` message so far.
 
 As the `Finished` messages are message digests of the complete handshake
 (with a total of 192 bits for TLS 1.0 and more for SSL 3.0), they can
@@ -1109,6 +1189,18 @@ provided by SSL/TLS is not desired or is not enough.
 
 Corresponds to the `SSL_get_peer_finished` routine in OpenSSL and may be used
 to implement the `tls-unique` channel binding from [RFC 5929][].
+
+### `tlsSocket.getPeerX509Certificate()`
+<!-- YAML
+added: v15.9.0
+-->
+
+* Returns: {X509Certificate}
+
+Returns the peer certificate as an {X509Certificate} object.
+
+If there is no peer certificate, or the socket has been destroyed,
+`undefined` will be returned.
 
 ### `tlsSocket.getProtocol()`
 <!-- YAML
@@ -1155,46 +1247,11 @@ added: v12.11.0
 -->
 
 * Returns: {Array} List of signature algorithms shared between the server and
-the client in the order of decreasing preference.
+  the client in the order of decreasing preference.
 
 See
 [SSL_get_shared_sigalgs](https://www.openssl.org/docs/man1.1.1/man3/SSL_get_shared_sigalgs.html)
 for more information.
-
-### `tlsSocket.exportKeyingMaterial(length, label[, context])`
-<!-- YAML
-added:
- - v13.10.0
- - v12.17.0
--->
-
-* `length` {number} number of bytes to retrieve from keying material
-* `label` {string} an application specific label, typically this will be a
-value from the
-[IANA Exporter Label Registry](https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml#exporter-labels).
-* `context` {Buffer} Optionally provide a context.
-
-* Returns: {Buffer} requested bytes of the keying material
-
-Keying material is used for validations to prevent different kind of attacks in
-network protocols, for example in the specifications of IEEE 802.1X.
-
-Example
-
-```js
-const keyingMaterial = tlsSocket.exportKeyingMaterial(
-  128,
-  'client finished');
-
-/**
- Example return value of keyingMaterial:
- <Buffer 76 26 af 99 c5 56 8e 42 09 91 ef 9f 93 cb ad 6c 7b 65 f8 53 f1 d8 d9
-    12 5a 33 b8 b5 25 df 7b 37 9f e0 e2 4f b8 67 83 a3 2f cd 5d 41 42 4c 91
-    74 ef 2c ... 78 more bytes>
-*/
-```
-See the OpenSSL [`SSL_export_keying_material`][] documentation for more
-information.
 
 ### `tlsSocket.getTLSTicket()`
 <!-- YAML
@@ -1209,6 +1266,18 @@ For a client, returns the TLS session ticket if one is available, or
 It may be useful for debugging.
 
 See [Session Resumption][] for more information.
+
+### `tlsSocket.getX509Certificate()`
+<!-- YAML
+added: v15.9.0
+-->
+
+* Returns: {X509Certificate}
+
+Returns the local certificate as an {X509Certificate} object.
+
+If there is no local certificate, or the socket has been destroyed,
+`undefined` will be returned.
 
 ### `tlsSocket.isSessionReused()`
 <!-- YAML
@@ -1343,7 +1412,7 @@ being issued by trusted CA (`options.ca`).
 <!-- YAML
 added: v0.11.3
 changes:
-  - version: REPLACEME
+  - version: v15.1.0
     pr-url: https://github.com/nodejs/node/pull/35753
     description: Added `onread` option.
   - version:

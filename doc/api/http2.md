@@ -2,6 +2,9 @@
 <!-- YAML
 added: v8.4.0
 changes:
+  - version: v15.3.0
+    pr-url: https://github.com/nodejs/node/pull/36070
+    description: It is possible to abort a request with an AbortSignal.
   - version: v15.0.0
     pr-url: https://github.com/nodejs/node/pull/34664
     description: Requests with the `host` header (with or without
@@ -519,6 +522,29 @@ added: v8.4.0
 A prototype-less object describing the current remote settings of this
 `Http2Session`. The remote settings are set by the *connected* HTTP/2 peer.
 
+#### `http2session.setLocalWindowSize(windowSize)`
+<!-- YAML
+added: v15.3.0
+-->
+
+* `windowSize` {number}
+
+Sets the local endpoint's window size.
+The `windowSize` is the total window size to set, not
+the delta.
+
+```js
+const http2 = require('http2');
+
+const server = http2.createServer();
+const expectedWindowSize = 2 ** 20;
+server.on('connect', (session) => {
+
+  // Set local window size to be 2 ** 20
+  session.setLocalWindowSize(expectedWindowSize);
+});
+```
+
 #### `http2session.setTimeout(msecs, callback)`
 <!-- YAML
 added: v8.4.0
@@ -823,6 +849,8 @@ added: v8.4.0
     and `256` (inclusive).
   * `waitForTrailers` {boolean} When `true`, the `Http2Stream` will emit the
     `'wantTrailers'` event after the final `DATA` frame has been sent.
+  * `signal` {AbortSignal} An AbortSignal that may be used to abort an ongoing
+    request.
 
 * Returns: {ClientHttp2Stream}
 
@@ -858,6 +886,10 @@ When `options.waitForTrailers` is set, the `Http2Stream` will not automatically
 close when the final `DATA` frame is transmitted. User code must call either
 `http2stream.sendTrailers()` or `http2stream.close()` to close the
 `Http2Stream`.
+
+When `options.signal` is set with an `AbortSignal` and then `abort` on the
+corresponding `AbortController` is called, the request will emit an `'error'`
+event with an `AbortError` error.
 
 The `:method` and `:path` pseudo-headers are not specified within `headers`,
 they respectively default to:
@@ -1406,7 +1438,7 @@ added: v8.4.0
   * `err` {Error}
   * `pushStream` {ServerHttp2Stream} The returned `pushStream` object.
   * `headers` {HTTP/2 Headers Object} Headers object the `pushStream` was
-  initiated with.
+    initiated with.
 
 Initiates a push stream. The callback is invoked with the new `Http2Stream`
 instance created for the push stream passed as the second argument, or an
@@ -1737,7 +1769,7 @@ the request body.
 When this event is emitted and handled, the [`'request'`][] event will
 not be emitted.
 
-### Event: `'connection'`
+#### Event: `'connection'`
 <!-- YAML
 added: v8.4.0
 -->
@@ -1881,7 +1913,7 @@ value only affects new connections to the server, not any existing connections.
 
 #### `server.updateSettings([settings])`
 <!-- YAML
-added: REPLACEME
+added: v15.1.0
 -->
 
 * `settings` {HTTP/2 Settings Object}
@@ -1925,7 +1957,7 @@ the request body.
 When this event is emitted and handled, the [`'request'`][] event will
 not be emitted.
 
-### Event: `'connection'`
+#### Event: `'connection'`
 <!-- YAML
 added: v8.4.0
 -->
@@ -2016,7 +2048,9 @@ added: v8.4.0
 The `'unknownProtocol'` event is emitted when a connecting client fails to
 negotiate an allowed protocol (i.e. HTTP/2 or HTTP/1.1). The event handler
 receives the socket for handling. If no listener is registered for this event,
-the connection is terminated. See the [Compatibility API][].
+the connection is terminated. A timeout may be specified using the
+`'unknownProtocolTimeout'` option passed to [`http2.createSecureServer()`][].
+See the [Compatibility API][].
 
 #### `server.close([callback])`
 <!-- YAML
@@ -2073,7 +2107,7 @@ value only affects new connections to the server, not any existing connections.
 
 #### `server.updateSettings([settings])`
 <!-- YAML
-added: REPLACEME
+added: v15.1.0
 -->
 
 * `settings` {HTTP/2 Settings Object}
@@ -2088,6 +2122,13 @@ Throws `ERR_INVALID_ARG_TYPE` for invalid `settings` argument.
 <!-- YAML
 added: v8.4.0
 changes:
+  - version:
+      - v15.10.0
+      - v14.16.0
+      - v12.21.0
+      - v10.24.0
+    pr-url: https://github.com/nodejs-private/node-private/pull/246
+    description: Added `unknownProtocolTimeout` option with a default of 10000.
   - version:
      - v14.4.0
      - v12.18.0
@@ -2194,6 +2235,10 @@ changes:
     `Http2ServerResponse` class to use.
     Useful for extending the original `Http2ServerResponse`.
     **Default:** `Http2ServerResponse`.
+  * `unknownProtocolTimeout` {number} Specifies a timeout in milliseconds that
+    a server should wait when an [`'unknownProtocol'`][] is emitted. If the
+    socket has not been destroyed by that time the server will destroy it.
+    **Default:** `10000`.
   * ...: Any [`net.createServer()`][] option can be provided.
 * `onRequestHandler` {Function} See [Compatibility API][]
 * Returns: {Http2Server}
@@ -2230,6 +2275,13 @@ server.listen(80);
 <!-- YAML
 added: v8.4.0
 changes:
+  - version:
+      - v15.10.0
+      - v14.16.0
+      - v12.21.0
+      - v10.24.0
+    pr-url: https://github.com/nodejs-private/node-private/pull/246
+    description: Added `unknownProtocolTimeout` option with a default of 10000.
   - version:
      - v14.4.0
      - v12.18.0
@@ -2326,6 +2378,10 @@ changes:
     servers, the identity options (`pfx` or `key`/`cert`) are usually required.
   * `origins` {string[]} An array of origin strings to send within an `ORIGIN`
     frame immediately following creation of a new server `Http2Session`.
+  * `unknownProtocolTimeout` {number} Specifies a timeout in milliseconds that
+    a server should wait when an [`'unknownProtocol'`][] event is emitted. If
+    the socket has not been destroyed by that time the server will destroy it.
+    **Default:** `10000`.
 * `onRequestHandler` {Function} See [Compatibility API][]
 * Returns: {Http2SecureServer}
 
@@ -2359,6 +2415,13 @@ server.listen(80);
 <!-- YAML
 added: v8.4.0
 changes:
+  - version:
+      - v15.10.0
+      - v14.16.0
+      - v12.21.0
+      - v10.24.0
+    pr-url: https://github.com/nodejs-private/node-private/pull/246
+    description: Added `unknownProtocolTimeout` option with a default of 10000.
   - version:
      - v14.4.0
      - v12.18.0
@@ -2442,6 +2505,10 @@ changes:
     instance passed to `connect` and the `options` object, and returns any
     [`Duplex`][] stream that is to be used as the connection for this session.
   * ...: Any [`net.connect()`][] or [`tls.connect()`][] options can be provided.
+  * `unknownProtocolTimeout` {number} Specifies a timeout in milliseconds that
+    a server should wait when an [`'unknownProtocol'`][] event is emitted. If
+    the socket has not been destroyed by that time the server will destroy it.
+    **Default:** `10000`.
 * `listener` {Function} Will be registered as a one-time listener of the
   [`'connect'`][] event.
 * Returns: {ClientHttp2Session}
@@ -2521,7 +2588,7 @@ console.log(packed.toString('base64'));
 added: v8.4.0
 -->
 
-* `buf` {Buffer|Uint8Array} The packed settings.
+* `buf` {Buffer|TypedArray} The packed settings.
 * Returns: {HTTP/2 Settings Object}
 
 Returns a [HTTP/2 Settings Object][] containing the deserialized settings from
@@ -3251,6 +3318,25 @@ deprecated: v13.0.0
 
 See [`response.socket`][].
 
+#### `response.createPushResponse(headers, callback)`
+<!-- YAML
+added: v8.4.0
+-->
+
+* `headers` {HTTP/2 Headers Object} An object describing the headers
+* `callback` {Function} Called once `http2stream.pushStream()` is finished,
+  or either when the attempt to create the pushed `Http2Stream` has failed or
+  has been rejected, or the state of `Http2ServerRequest` is closed prior to
+  calling the `http2stream.pushStream()` method
+  * `err` {Error}
+  * `res` {http2.Http2ServerResponse} The newly-created `Http2ServerResponse`
+    object
+
+Call [`http2stream.pushStream()`][] with the given headers, and wrap the
+given [`Http2Stream`][] on a newly created `Http2ServerResponse` as the callback
+parameter if successful. When `Http2ServerRequest` is closed, the callback is
+called with an error `ERR_HTTP2_INVALID_STREAM`.
+
 #### `response.end([data[, encoding]][, callback])`
 <!-- YAML
 added: v8.4.0
@@ -3385,6 +3471,15 @@ Removes a header that has been queued for implicit sending.
 ```js
 response.removeHeader('Content-Encoding');
 ```
+
+### `response.req`
+<!-- YAML
+added: v15.7.0
+-->
+
+* {http2.Http2ServerRequest}
+
+A reference to the original HTTP2 `request` object.
 
 #### `response.sendDate`
 <!-- YAML
@@ -3615,7 +3710,8 @@ will be emitted.
 const body = 'hello world';
 response.writeHead(200, {
   'Content-Length': Buffer.byteLength(body),
-  'Content-Type': 'text/plain; charset=utf-8' });
+  'Content-Type': 'text/plain; charset=utf-8',
+});
 ```
 
 `Content-Length` is given in bytes not characters. The
@@ -3647,24 +3743,6 @@ const server = http2.createServer((req, res) => {
 
 Attempting to set a header field name or value that contains invalid characters
 will result in a [`TypeError`][] being thrown.
-
-#### `response.createPushResponse(headers, callback)`
-<!-- YAML
-added: v8.4.0
--->
-
-* `headers` {HTTP/2 Headers Object} An object describing the headers
-* `callback` {Function} Called once `http2stream.pushStream()` is finished,
-  or either when the attempt to create the pushed `Http2Stream` has failed or
-  has been rejected, or the state of `Http2ServerRequest` is closed prior to
-  calling the `http2stream.pushStream()` method
-  * `err` {Error}
-  * `stream` {ServerHttp2Stream} The newly-created `ServerHttp2Stream` object
-
-Call [`http2stream.pushStream()`][] with the given headers, and wrap the
-given [`Http2Stream`][] on a newly created `Http2ServerResponse` as the callback
-parameter if successful. When `Http2ServerRequest` is closed, the callback is
-called with an error `ERR_HTTP2_INVALID_STREAM`.
 
 ## Collecting HTTP/2 performance metrics
 

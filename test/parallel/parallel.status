@@ -5,14 +5,8 @@ prefix parallel
 # sample-test                        : PASS,FLAKY
 
 [true] # This section applies to all platforms
-test-http2-respond-file-error-pipe-offset: PASS,FLAKY
-test-worker-eventlooputil: PASS,FLAKY
 
 [$system==win32]
-# https://github.com/nodejs/node/issues/20750
-test-http2-client-upload: PASS,FLAKY
-# https://github.com/nodejs/node/issues/20750
-test-http2-client-upload-reject: PASS,FLAKY
 # https://github.com/nodejs/node/issues/30847
 test-http2-compat-client-upload-reject: PASS,FLAKY
 # https://github.com/nodejs/node/issues/30845
@@ -29,7 +23,6 @@ test-worker-memory: PASS,FLAKY
 test-worker-message-port-transfer-terminate: PASS,FLAKY
 
 [$system==linux]
-test-webcrypto-encrypt-decrypt-aes: PASS,FLAKY
 
 [$system==macos]
 
@@ -72,3 +65,7 @@ test-net-write-after-end-nt: SKIP
 test-tls-env-extra-ca: SKIP
 # https://github.com/nodejs/node/pull/34209
 test-dgram-error-message-address: SKIP
+# https://github.com/nodejs/node/issues/36929
+test-crypto-secure-heap: SKIP
+# https://github.com/nodejs/node/issues/36925
+test-fs-read-type: SKIP

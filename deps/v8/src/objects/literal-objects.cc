@@ -119,8 +119,9 @@ constexpr int ComputeEnumerationIndex(int value_index) {
   // We "shift" value indices to ensure that the enumeration index for the value
   // will not overlap with minimum properties set for both class and prototype
   // objects.
-  return value_index + Max(ClassBoilerplate::kMinimumClassPropertiesCount,
-                           ClassBoilerplate::kMinimumPrototypePropertiesCount);
+  return value_index +
+         std::max({ClassBoilerplate::kMinimumClassPropertiesCount,
+                   ClassBoilerplate::kMinimumPrototypePropertiesCount});
 }
 
 inline int GetExistingValueIndex(Object value) {
@@ -347,7 +348,7 @@ class ObjectDescriptor {
       AddToDictionaryTemplate(isolate, properties_dictionary_template_, name,
                               value_index, value_kind, value);
     } else {
-      *temp_handle_.location() = value.ptr();
+      temp_handle_.PatchValue(value);
       AddToDescriptorArrayTemplate(isolate, descriptor_array_template_, name,
                                    value_kind, temp_handle_);
     }

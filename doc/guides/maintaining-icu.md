@@ -44,7 +44,7 @@ and announces them on the [`tz-announce`](https://mm.icann.org/pipermail/tz-anno
 mailing list.
 
 The Unicode project takes new releases and publishes
-[updated time zone data files](https://github.com/unicode-org/icu-data/tree/master/tzdata/icunew)
+[updated time zone data files](https://github.com/unicode-org/icu-data/tree/HEAD/tzdata/icunew)
 in the icu/icu-data repository.
 
 All modern versions of Node.js use the version 44 ABI of the time zone data
@@ -158,7 +158,7 @@ process.versions.icu;
 new Intl.DateTimeFormat('es', { month: 'long' }).format(new Date(9E8));
 ```
 
-(This should print your updated ICU version number, and also `January` again.)
+(This should print your updated ICU version number, and also `enero` again.)
 
 You are ready to check in the updated `deps/icu-small`. This is a big commit,
 so make this a separate commit from the smaller changes.

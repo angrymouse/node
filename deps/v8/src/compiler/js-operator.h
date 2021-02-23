@@ -789,18 +789,32 @@ std::ostream& operator<<(std::ostream&, GetIteratorParameters const&);
 
 const GetIteratorParameters& GetIteratorParametersOf(const Operator* op);
 
-// Descriptor used by the JSForInPrepare and JSForInNext opcodes.
 enum class ForInMode : uint8_t {
   kUseEnumCacheKeysAndIndices,
   kUseEnumCacheKeys,
   kGeneric
 };
+size_t hash_value(ForInMode const&);
+std::ostream& operator<<(std::ostream&, ForInMode const&);
 
-size_t hash_value(ForInMode);
+class ForInParameters final {
+ public:
+  ForInParameters(const FeedbackSource& feedback, ForInMode mode)
+      : feedback_(feedback), mode_(mode) {}
 
-std::ostream& operator<<(std::ostream&, ForInMode);
+  const FeedbackSource& feedback() const { return feedback_; }
+  ForInMode mode() const { return mode_; }
 
-ForInMode ForInModeOf(Operator const* op) V8_WARN_UNUSED_RESULT;
+ private:
+  const FeedbackSource feedback_;
+  const ForInMode mode_;
+};
+
+bool operator==(ForInParameters const&, ForInParameters const&);
+bool operator!=(ForInParameters const&, ForInParameters const&);
+size_t hash_value(ForInParameters const&);
+std::ostream& operator<<(std::ostream&, ForInParameters const&);
+const ForInParameters& ForInParametersOf(const Operator* op);
 
 int RegisterCountOf(Operator const* op) V8_WARN_UNUSED_RESULT;
 
@@ -816,6 +830,8 @@ class V8_EXPORT_PRIVATE JSOperatorBuilder final
     : public NON_EXPORTED_BASE(ZoneObject) {
  public:
   explicit JSOperatorBuilder(Zone* zone);
+  JSOperatorBuilder(const JSOperatorBuilder&) = delete;
+  JSOperatorBuilder& operator=(const JSOperatorBuilder&) = delete;
 
   const Operator* Equal(FeedbackSource const& feedback);
   const Operator* StrictEqual(FeedbackSource const& feedback);
@@ -921,6 +937,8 @@ class V8_EXPORT_PRIVATE JSOperatorBuilder final
 
   const Operator* LoadProperty(FeedbackSource const& feedback);
   const Operator* LoadNamed(Handle<Name> name, FeedbackSource const& feedback);
+  const Operator* LoadNamedFromSuper(Handle<Name> name,
+                                     FeedbackSource const& feedback);
 
   const Operator* StoreProperty(LanguageMode language_mode,
                                 FeedbackSource const& feedback);
@@ -965,8 +983,8 @@ class V8_EXPORT_PRIVATE JSOperatorBuilder final
   const Operator* AsyncFunctionResolve();
 
   const Operator* ForInEnumerate();
-  const Operator* ForInNext(ForInMode);
-  const Operator* ForInPrepare(ForInMode);
+  const Operator* ForInNext(ForInMode mode, const FeedbackSource& feedback);
+  const Operator* ForInPrepare(ForInMode mode, const FeedbackSource& feedback);
 
   const Operator* LoadMessage();
   const Operator* StoreMessage();
@@ -1009,8 +1027,6 @@ class V8_EXPORT_PRIVATE JSOperatorBuilder final
 
   const JSOperatorGlobalCache& cache_;
   Zone* const zone_;
-
-  DISALLOW_COPY_AND_ASSIGN(JSOperatorBuilder);
 };
 
 // Node wrappers.
@@ -1389,6 +1405,26 @@ class JSLoadNamedNode final : public JSNodeWrapperBase {
 #undef INPUTS
 };
 
+class JSLoadNamedFromSuperNode final : public JSNodeWrapperBase {
+ public:
+  explicit constexpr JSLoadNamedFromSuperNode(Node* node)
+      : JSNodeWrapperBase(node) {
+    CONSTEXPR_DCHECK(node->opcode() == IrOpcode::kJSLoadNamedFromSuper);
+  }
+
+  const NamedAccess& Parameters() const { return NamedAccessOf(node()->op()); }
+
+  // TODO(marja, v8:9237): A more intuitive order would be (home_object,
+  // receiver, feedback_vector). The order can be changed once we no longer
+  // delegate to Runtime_LoadFromSuper.
+#define INPUTS(V)                       \
+  V(Receiver, receiver, 0, Object)      \
+  V(HomeObject, home_object, 1, Object) \
+  V(FeedbackVector, feedback_vector, 2, HeapObject)
+  INPUTS(DEFINE_INPUT_ACCESSORS)
+#undef INPUTS
+};
+
 class JSStoreNamedNode final : public JSNodeWrapperBase {
  public:
   explicit constexpr JSStoreNamedNode(Node* node) : JSNodeWrapperBase(node) {
@@ -1527,6 +1563,43 @@ class JSCreateClosureNode final : public JSNodeWrapperBase {
 #undef INPUTS
 
   FeedbackCellRef GetFeedbackCellRefChecked(JSHeapBroker* broker) const;
+};
+
+class JSForInPrepareNode final : public JSNodeWrapperBase {
+ public:
+  explicit constexpr JSForInPrepareNode(Node* node) : JSNodeWrapperBase(node) {
+    CONSTEXPR_DCHECK(node->opcode() == IrOpcode::kJSForInPrepare);
+  }
+
+  const ForInParameters& Parameters() const {
+    return ForInParametersOf(node()->op());
+  }
+
+#define INPUTS(V)                      \
+  V(Enumerator, enumerator, 0, Object) \
+  V(FeedbackVector, feedback_vector, 1, HeapObject)
+  INPUTS(DEFINE_INPUT_ACCESSORS)
+#undef INPUTS
+};
+
+class JSForInNextNode final : public JSNodeWrapperBase {
+ public:
+  explicit constexpr JSForInNextNode(Node* node) : JSNodeWrapperBase(node) {
+    CONSTEXPR_DCHECK(node->opcode() == IrOpcode::kJSForInNext);
+  }
+
+  const ForInParameters& Parameters() const {
+    return ForInParametersOf(node()->op());
+  }
+
+#define INPUTS(V)                       \
+  V(Receiver, receiver, 0, Object)      \
+  V(CacheArray, cache_array, 1, Object) \
+  V(CacheType, cache_type, 2, Object)   \
+  V(Index, index, 3, Smi)               \
+  V(FeedbackVector, feedback_vector, 4, HeapObject)
+  INPUTS(DEFINE_INPUT_ACCESSORS)
+#undef INPUTS
 };
 
 #undef DEFINE_INPUT_ACCESSORS

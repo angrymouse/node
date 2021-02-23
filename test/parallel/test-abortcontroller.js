@@ -1,10 +1,9 @@
-// Flags: --no-warnings --expose-internals
+// Flags: --no-warnings
 'use strict';
 
 const common = require('../common');
 
-const { ok, strictEqual } = require('assert');
-const { Event } = require('internal/event_target');
+const { ok, strictEqual, throws } = require('assert');
 
 {
   // Tests that abort is fired with the correct event type on AbortControllers
@@ -51,4 +50,20 @@ const { Event } = require('internal/event_target');
   const untrusted = Reflect.getOwnPropertyDescriptor(ev3, 'isTrusted').get;
   strictEqual(firstTrusted, secondTrusted);
   strictEqual(untrusted, firstTrusted);
+}
+
+{
+  // Tests that AbortSignal is impossible to construct manually
+  const ac = new AbortController();
+  throws(
+    () => new ac.signal.constructor(),
+    /^TypeError: Illegal constructor$/
+  );
+}
+{
+  // Symbol.toStringTag
+  const toString = (o) => Object.prototype.toString.call(o);
+  const ac = new AbortController();
+  strictEqual(toString(ac), '[object AbortController]');
+  strictEqual(toString(ac.signal), '[object AbortSignal]');
 }

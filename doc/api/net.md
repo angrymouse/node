@@ -70,7 +70,7 @@ added: v15.0.0
 -->
 
 * `address` {string} An IPv4 or IPv6 address.
-* `type` {string} Either `'ipv4'` or `'ipv6'`. **Default**: `'ipv4'`.
+* `type` {string} Either `'ipv4'` or `'ipv6'`. **Default:** `'ipv4'`.
 
 Adds a rule to block the given IP address.
 
@@ -81,7 +81,7 @@ added: v15.0.0
 
 * `start` {string} The starting IPv4 or IPv6 address in the range.
 * `end` {string} The ending IPv4 or IPv6 address in the range.
-* `type` {string} Either `'ipv4'` or `'ipv6'`. **Default**: `'ipv4'`.
+* `type` {string} Either `'ipv4'` or `'ipv6'`. **Default:** `'ipv4'`.
 
 Adds a rule to block a range of IP addresses from `start` (inclusive) to
 `end` (inclusive).
@@ -95,7 +95,7 @@ added: v15.0.0
 * `prefix` {number} The number of CIDR prefix bits. For IPv4, this
   must be a value between `0` and `32`. For IPv6, this must be between
   `0` and `128`.
-* `type` {string} Either `'ipv4'` or `'ipv6'`. **Default**: `'ipv4'`.
+* `type` {string} Either `'ipv4'` or `'ipv6'`. **Default:** `'ipv4'`.
 
 Adds a rule to block a range of IP addresses specified as a subnet mask.
 
@@ -105,7 +105,7 @@ added: v15.0.0
 -->
 
 * `address` {string} The IP address to check
-* `type` {string} Either `'ipv4'` or `'ipv6'`. **Default**: `'ipv4'`.
+* `type` {string} Either `'ipv4'` or `'ipv6'`. **Default:** `'ipv4'`.
 * Returns: {boolean}
 
 Returns `true` if the given IP address matches any of the rules added to the
@@ -258,6 +258,7 @@ an [IPC][] server depending on what it listens to.
 
 Possible signatures:
 
+<!--lint disable no-undefined-references-->
 * [`server.listen(handle[, backlog][, callback])`][`server.listen(handle)`]
 * [`server.listen(options[, callback])`][`server.listen(options)`]
 * [`server.listen(path[, backlog][, callback])`][`server.listen(path)`]
@@ -265,6 +266,7 @@ Possible signatures:
 * <a href="#net_server_listen_port_host_backlog_callback">
   <code>server.listen([port[, host[, backlog]]][, callback])</code></a>
   for TCP servers
+<!--lint enable no-undefined-references-->
 
 This function is asynchronous. When the server starts listening, the
 [`'listening'`][] event will be emitted. The last parameter `callback`
@@ -322,6 +324,9 @@ Listening on a file descriptor is not supported on Windows.
 <!-- YAML
 added: v0.11.14
 changes:
+  - version: v15.6.0
+    pr-url: https://github.com/nodejs/node/pull/36623
+    description: AbortSignal support was added.
   - version: v11.4.0
     pr-url: https://github.com/nodejs/node/pull/23798
     description: The `ipv6Only` option is supported.
@@ -342,16 +347,19 @@ changes:
   * `ipv6Only` {boolean} For TCP servers, setting `ipv6Only` to `true` will
     disable dual-stack support, i.e., binding to host `::` won't make
     `0.0.0.0` be bound. **Default:** `false`.
+  * `signal` {AbortSignal} An AbortSignal that may be used to close a listening server.
 * `callback` {Function}
   functions.
 * Returns: {net.Server}
 
+<!--lint disable no-undefined-references-->
 If `port` is specified, it behaves the same as
 <a href="#net_server_listen_port_host_backlog_callback">
 <code>server.listen([port[, host[, backlog]]][, callback])</code></a>.
 Otherwise, if `path` is specified, it behaves the same as
 [`server.listen(path[, backlog][, callback])`][`server.listen(path)`].
 If none of them is specified, an error will be thrown.
+<!--lint enable no-undefined-references-->
 
 If `exclusive` is `false` (default), then cluster workers will use the same
 underlying handle, allowing connection handling duties to be shared. When
@@ -370,6 +378,20 @@ server.listen({
 Starting an IPC server as root may cause the server path to be inaccessible for
 unprivileged users. Using `readableAll` and `writableAll` will make the server
 accessible for all users.
+
+If the `signal` option is enabled, calling `.abort()` on the corresponding
+`AbortController` is similar to calling `.close()` on the server:
+
+```js
+const controller = new AbortController();
+server.listen({
+  host: 'localhost',
+  port: 80,
+  signal: controller.signal
+});
+// Later, when you want to close the server.
+controller.abort();
+```
 
 #### `server.listen(path[, backlog][, callback])`
 <!-- YAML
@@ -994,6 +1016,16 @@ If `timeout` is 0, then the existing idle timeout is disabled.
 The optional `callback` parameter will be added as a one-time listener for the
 [`'timeout'`][] event.
 
+### `socket.timeout`
+<!-- YAML
+added: v10.7.0
+-->
+
+* {number|undefined}
+
+The socket timeout in milliseconds as set by [`socket.setTimeout()`][].
+It is `undefined` if a timeout has not been set.
+
 ### `socket.unref()`
 <!-- YAML
 added: v0.9.1
@@ -1205,14 +1237,6 @@ immediately initiates connection with
 [`socket.connect(port[, host][, connectListener])`][`socket.connect(port)`],
 then returns the `net.Socket` that starts the connection.
 
-## `net.createQuicSocket([options])`
-<!-- YAML
-added: v15.0.0
--->
-
-Creates and returns a new `QuicSocket`. Please refer to the [QUIC documentation][]
-for details.
-
 ## `net.createServer([options][, connectionListener])`
 <!-- YAML
 added: v0.5.0
@@ -1320,7 +1344,6 @@ Returns `true` if input is a version 6 IP address, otherwise returns `false`.
 
 [IPC]: #net_ipc_support
 [Identifying paths for IPC connections]: #net_identifying_paths_for_ipc_connections
-[QUIC documentation]: quic.md
 [Readable Stream]: stream.md#stream_class_stream_readable
 [`'close'`]: #net_event_close
 [`'connect'`]: #net_event_connect
